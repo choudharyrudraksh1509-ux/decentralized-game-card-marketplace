@@ -69,13 +69,6 @@ export default function TransactionHistory() {
           </h2>
           <p className="text-muted text-sm mt-1">Live smart contract events.</p>
         </div>
-        <button
-          onClick={() => refetch()}
-          className="btn-ghost text-xs px-3 py-1.5"
-          disabled={isLoading}
-        >
-          {isLoading ? "Refreshing..." : "⟳ Refresh"}
-        </button>
       </div>
 
       <div className="card-tile p-6 max-h-[600px] overflow-y-auto">

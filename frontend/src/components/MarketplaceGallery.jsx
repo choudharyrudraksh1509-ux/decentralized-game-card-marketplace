@@ -169,13 +169,6 @@ export default function MarketplaceGallery() {
           </h2>
           <p className="text-muted text-sm mt-1">Discover and collect unique cards.</p>
         </div>
-        <button 
-          onClick={() => refetchMulticall()} 
-          className="btn-ghost text-xs hidden sm:block"
-          title="Refresh listings"
-        >
-          ⟳ Refresh
-        </button>
       </div>
 
       {isLoading ? (
