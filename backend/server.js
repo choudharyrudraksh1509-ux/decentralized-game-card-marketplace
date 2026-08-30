@@ -1,195 +1,117 @@
 /**
- * backend/server.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Lightweight Express server that bridges the React frontend to the Node.js
- * IPFS upload scripts (ipfs/uploadAsset.js, ipfs/createMetadata.js).
+ * Minimal Express server for IPFS uploads using nft.storage
  *
- * The browser cannot run Node scripts directly, so this server:
- *   POST /api/ipfs/upload-asset    → spawns uploadAsset.js, returns imageCID
- *   POST /api/ipfs/create-metadata → spawns createMetadata.js, returns metaCID
- *   GET  /api/health               → liveness check
- *
- * Run:
- *   cd backend && npm start        (production)
- *   cd backend && npm run dev      (nodemon auto-reload)
- * ─────────────────────────────────────────────────────────────────────────────
+ * Instructions to run:
+ * 1. Make sure you have installed dependencies: `npm install` in the backend/ dir.
+ * 2. Ensure your backend/.env file has: NFT_STORAGE_API_KEY=your_key_here
+ * 3. Start the server from the project root or backend folder:
+ * 
+ *    node backend/server.js
+ * 
+ * The server will run on port 5000.
  */
 
-"use strict";
+import express from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import { NFTStorage, File } from 'nft.storage';
+import dotenv from 'dotenv';
+import fs from 'fs';
 
-const express    = require("express");
-const cors       = require("cors");
-const multer     = require("multer");
-const path       = require("path");
-const fs         = require("fs");
-const os         = require("os");
-const { spawn }  = require("child_process");
-require("dotenv").config();
-
-// ── Config ────────────────────────────────────────────────────────────────────
-
-const PORT        = parseInt(process.env.PORT ?? "3001", 10);
-const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "http://localhost:5173";
-const API_KEY     = process.env.NFT_STORAGE_API_KEY ?? "";
-
-// Absolute path to the ipfs/ directory (one level up from backend/)
-const IPFS_DIR = path.resolve(__dirname, "..", "ipfs");
-
-// ── Express setup ─────────────────────────────────────────────────────────────
+// Load environment variables from .env
+dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+app.use(cors());
 app.use(express.json());
 
-// ── Multer: store uploads in OS temp dir ──────────────────────────────────────
+// Configure multer to temporarily store uploaded files
+const upload = multer({ dest: 'uploads/' });
 
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, os.tmpdir()),
-    filename:    (_req, file, cb) => {
-      const ext  = path.extname(file.originalname);
-      const name = `card-asset-${Date.now()}${ext}`;
-      cb(null, name);
-    },
-  }),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB max
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) return cb(null, true);
-    cb(new Error("Only image files are accepted."));
-  },
-});
-
-// ── Utility: spawn a node script and capture stdout ───────────────────────────
-
-/**
- * Runs `node <scriptPath> [...args]` with NFT_STORAGE_API_KEY in env.
- * Resolves with the trimmed stdout string.
- * Rejects on non-zero exit or if stdout is empty.
- */
-function runIpfsScript(scriptPath, args = []) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,     // same node binary that is running the server
-      [scriptPath, ...args],
-      {
-        env: {
-          ...process.env,
-          NFT_STORAGE_API_KEY: API_KEY,
-        },
-        // Scripts use ESM (ipfs/package.json has "type":"module"), so we
-        // must run them inside the ipfs/ directory so Node respects that.
-        cwd: IPFS_DIR,
-      }
-    );
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
-
-    child.on("close", (code) => {
-      if (code !== 0) {
-        const detail = stderr.trim() || `Script exited with code ${code}`;
-        return reject(new Error(detail));
-      }
-      const result = stdout.trim();
-      if (!result) return reject(new Error("Script produced no output on stdout."));
-      resolve(result);
-    });
-
-    child.on("error", reject);
-  });
-}
-
-// ── Routes ────────────────────────────────────────────────────────────────────
-
-/** GET /api/health — simple liveness check */
-app.get("/api/health", (_req, res) => {
-  res.json({
-    ok:      true,
-    service: "game-card-marketplace-backend",
-    ipfsDir: IPFS_DIR,
-    apiKey:  API_KEY ? "set" : "MISSING",
-  });
-});
-
-/**
- * POST /api/ipfs/upload-asset
- * multipart/form-data  { image: <file> }
- * → { cid: "ipfs://..." }
- */
-app.post("/api/ipfs/upload-asset", upload.single("image"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No image file provided." });
+// Helper to initialize the nft.storage client
+const getClient = () => {
+  const token = process.env.NFT_STORAGE_API_KEY;
+  if (!token) {
+    throw new Error('NFT_STORAGE_API_KEY is not defined in the environment variables.');
   }
+  return new NFTStorage({ token });
+};
 
-  const tmpPath = req.file.path;
-
+// -----------------------------------------------------------------------------
+// Endpoint 1: Upload Image
+// Receives a multipart file, uploads it to IPFS, and returns the image CID.
+// -----------------------------------------------------------------------------
+app.post('/upload-image', upload.single('image'), async (req, res) => {
   try {
-    if (!API_KEY) throw new Error("NFT_STORAGE_API_KEY is not configured on the server.");
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided.' });
+    }
 
-    // uploadAsset.js argv[2] = absolute path to the image
-    const scriptPath = path.join(IPFS_DIR, "uploadAsset.js");
-    const cid = await runIpfsScript(scriptPath, [tmpPath]);
+    const client = getClient();
 
-    res.json({ cid });
-  } catch (err) {
-    console.error("[upload-asset] Error:", err.message);
-    res.status(500).json({ error: err.message });
-  } finally {
-    // Always clean up the temp file
-    fs.unlink(tmpPath, () => {});
+    // Read the file from the temporary multer path
+    const buffer = fs.readFileSync(req.file.path);
+    
+    // Create an nft.storage File object
+    const file = new File([buffer], req.file.originalname, { type: req.file.mimetype });
+
+    // Store it on IPFS
+    const cid = await client.storeBlob(file);
+
+    // Clean up the temporary file
+    fs.unlinkSync(req.file.path);
+
+    // Return the resulting CID
+    res.json({ cid: `ipfs://${cid}` });
+  } catch (error) {
+    console.error('Error in /upload-image:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-/**
- * POST /api/ipfs/create-metadata
- * JSON body { name, description, imageCID, rarity, attributes?: [{trait_type, value}] }
- * → { cid: "ipfs://..." }
- */
-app.post("/api/ipfs/create-metadata", async (req, res) => {
-  const { name, description, imageCID, rarity, attributes = [] } = req.body ?? {};
-
-  // Basic validation
-  const missing = ["name", "description", "imageCID", "rarity"].filter(
-    (k) => !req.body?.[k]?.trim?.()
-  );
-  if (missing.length) {
-    return res.status(400).json({ error: `Missing required fields: ${missing.join(", ")}` });
-  }
-
+// -----------------------------------------------------------------------------
+// Endpoint 2: Create Metadata
+// Receives JSON (name, description, imageCID, rarity), uploads to IPFS, returns CID.
+// -----------------------------------------------------------------------------
+app.post('/create-metadata', async (req, res) => {
   try {
-    if (!API_KEY) throw new Error("NFT_STORAGE_API_KEY is not configured on the server.");
+    const { name, description, imageCID, rarity } = req.body;
 
-    const scriptPath = path.join(IPFS_DIR, "createMetadata.js");
+    if (!name || !description || !imageCID || !rarity) {
+      return res.status(400).json({ error: 'Missing required fields (name, description, imageCID, rarity).' });
+    }
 
-    // Build positional args: name description imageCID rarity [key=value ...]
-    const extraArgs = attributes.map(({ trait_type, value }) => `${trait_type}=${value}`);
-    const args = [name, description, imageCID, rarity, ...extraArgs];
+    const client = getClient();
 
-    const cid = await runIpfsScript(scriptPath, args);
-    res.json({ cid });
-  } catch (err) {
-    console.error("[create-metadata] Error:", err.message);
-    res.status(500).json({ error: err.message });
+    // Build the metadata object compliant with ERC-721 / OpenSea standards
+    const metadata = {
+      name,
+      description,
+      image: imageCID,
+      attributes: [
+        { trait_type: 'Rarity', value: rarity }
+      ]
+    };
+
+    const metadataString = JSON.stringify(metadata);
+    const file = new File([metadataString], 'metadata.json', { type: 'application/json' });
+
+    // Store the JSON string as a blob on IPFS
+    const cid = await client.storeBlob(file);
+
+    // Return the resulting CID
+    res.json({ cid: `ipfs://${cid}` });
+  } catch (error) {
+    console.error('Error in /create-metadata:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
-
-// ── Error handler ─────────────────────────────────────────────────────────────
-
-app.use((err, _req, res, _next) => {
-  console.error("[unhandled]", err.message);
-  res.status(500).json({ error: err.message ?? "Internal server error." });
-});
-
-// ── Start ─────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  console.log(`\n🃏  Game Card Marketplace — Backend Server`);
-  console.log(`   Listening on  http://localhost:${PORT}`);
-  console.log(`   CORS origin   ${CORS_ORIGIN}`);
-  console.log(`   IPFS scripts  ${IPFS_DIR}`);
-  console.log(`   NFT_STORAGE_API_KEY: ${API_KEY ? "✅ set" : "❌ MISSING — set it in backend/.env"}\n`);
+  console.log(`Server successfully started on port ${PORT}`);
+  console.log(`Endpoints ready:`);
+  console.log(`  POST http://localhost:${PORT}/upload-image`);
+  console.log(`  POST http://localhost:${PORT}/create-metadata`);
 });

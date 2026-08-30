@@ -21,7 +21,7 @@ import { useMintCard, isContractConfigured, CONTRACT_ADDRESS } from "../hooks/us
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:3001";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:5000";
 
 const RARITIES = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
 
@@ -40,7 +40,7 @@ const MAX_FILE_SIZE_MB = 20;
 async function apiUploadAsset(file) {
   const form = new FormData();
   form.append("image", file);
-  const res = await fetch(`${BACKEND_URL}/api/ipfs/upload-asset`, {
+  const res = await fetch(`${BACKEND_URL}/upload-image`, {
     method: "POST",
     body:   form,
   });
@@ -50,10 +50,10 @@ async function apiUploadAsset(file) {
 }
 
 async function apiCreateMetadata({ name, description, imageCID, rarity, attributes }) {
-  const res = await fetch(`${BACKEND_URL}/api/ipfs/create-metadata`, {
+  const res = await fetch(`${BACKEND_URL}/create-metadata`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ name, description, imageCID, rarity, attributes }),
+    body:    JSON.stringify({ name, description, imageCID, rarity }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? `Metadata failed (${res.status})`);

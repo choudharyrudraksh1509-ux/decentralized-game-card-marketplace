@@ -1,5 +1,7 @@
-import { useAccount, useReadContract, useReadContracts } from "wagmi";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useAccount, useReadContract, useReadContracts, useWriteContract, usePublicClient } from "wagmi";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { parseEther, formatEther } from "viem";
 import ABI from "../abi/GameCardMarketplace.json";
 import { CONTRACT_ADDRESS, isContractConfigured } from "../hooks/useMarketplace";
 import Card from "./Card";
@@ -14,6 +16,11 @@ function resolveIpfs(url) {
 
 export default function MyCollection() {
   const { address, isConnected } = useAccount();
+  const publicClient = usePublicClient();
+  const queryClient = useQueryClient();
+
+  const [operatingId, setOperatingId] = useState(null);
+  const [operationState, setOperationState] = useState(""); // 'approving', 'listing'
 
   // 1. Fetch balance
   const { data: balanceData, isLoading: isBalanceLoading } = useReadContract({
@@ -40,21 +47,29 @@ export default function MyCollection() {
 
   const tokenIds = tokenIdsData?.map(d => d.result).filter(res => res !== undefined) || [];
 
-  // 3. Fetch token URIs
-  const { data: urisData, isLoading: isUrisLoading } = useReadContracts({
-    contracts: tokenIds.map(id => ({
-      address: CONTRACT_ADDRESS,
-      abi: ABI,
-      functionName: "tokenURI",
-      args: [id]
-    })),
+  // 3. Fetch token URIs AND listing states
+  const { data: multicallData, isLoading: isMulticallLoading, refetch: refetchMulticall } = useReadContracts({
+    contracts: tokenIds.flatMap(id => [
+      { address: CONTRACT_ADDRESS, abi: ABI, functionName: "tokenURI", args: [id] },
+      { address: CONTRACT_ADDRESS, abi: ABI, functionName: "getListing", args: [id] }
+    ]),
     query: { enabled: tokenIds.length > 0 }
   });
 
-  const tokens = tokenIds.map((id, index) => ({
-    id,
-    uri: urisData?.[index]?.result
-  })).filter(t => t.uri);
+  const tokens = [];
+  if (multicallData) {
+    for (let i = 0; i < tokenIds.length; i++) {
+      const uriResult = multicallData[i * 2]?.result;
+      const listingResult = multicallData[i * 2 + 1]?.result; // [seller, price, isListed]
+      if (uriResult) {
+        tokens.push({
+          id: tokenIds[i],
+          uri: uriResult,
+          listing: listingResult
+        });
+      }
+    }
+  }
 
   // 4. Fetch JSON metadata from IPFS
   const { data: cards, isLoading: isMetadataLoading } = useQuery({
@@ -76,7 +91,63 @@ export default function MyCollection() {
     enabled: tokens.length > 0
   });
 
-  const isLoading = isBalanceLoading || isTokenIdsLoading || isUrisLoading || isMetadataLoading;
+  // 5. Approval & Listing Logic
+  const { data: isApproved, refetch: refetchApproval } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: ABI,
+    functionName: "isApprovedForAll",
+    args: [address, CONTRACT_ADDRESS],
+    query: { enabled: !!address }
+  });
+
+  const { writeContractAsync } = useWriteContract();
+
+  const handleList = async (tokenId, priceStr) => {
+    try {
+      setOperatingId(tokenId);
+      
+      let currentlyApproved = isApproved;
+      
+      // Step 1: Approve marketplace if not already approved
+      if (!currentlyApproved) {
+        setOperationState("approving");
+        const hash = await writeContractAsync({
+          address: CONTRACT_ADDRESS,
+          abi: ABI,
+          functionName: "setApprovalForAll",
+          args: [CONTRACT_ADDRESS, true]
+        });
+        await publicClient.waitForTransactionReceipt({ hash });
+        await refetchApproval();
+        currentlyApproved = true;
+      }
+
+      // Step 2: List the card
+      setOperationState("listing");
+      const priceWei = parseEther(priceStr);
+      const listHash = await writeContractAsync({
+        address: CONTRACT_ADDRESS,
+        abi: ABI,
+        functionName: "listCard",
+        args: [tokenId, priceWei]
+      });
+      
+      await publicClient.waitForTransactionReceipt({ hash: listHash });
+      
+      // Success! Refresh local UI state and global query caches
+      setOperatingId(null);
+      setOperationState("");
+      refetchMulticall(); 
+      queryClient.invalidateQueries({ queryKey: ["metadata"] });
+
+    } catch (error) {
+      console.error("Listing failed:", error);
+      setOperatingId(null);
+      setOperationState("");
+    }
+  };
+
+  const isLoading = isBalanceLoading || isTokenIdsLoading || isMulticallLoading || isMetadataLoading;
 
   if (!isConnected) {
     return (
@@ -118,6 +189,10 @@ export default function MyCollection() {
           {cards.map((card) => {
             const rarity = card.metadata?.attributes?.find(a => a.trait_type === "Rarity")?.value || "Common";
             const imageUrl = resolveIpfs(card.metadata?.image);
+            
+            const isListed = card.listing && card.listing[2]; // listing[2] is boolean isListed
+            const badgeText = isListed ? "Currently Listed" : "Owned by you";
+            const priceStr = isListed ? formatEther(card.listing[1]) : undefined;
 
             return (
               <Card 
@@ -127,7 +202,20 @@ export default function MyCollection() {
                 name={card.metadata?.name}
                 rarity={rarity}
                 description={card.metadata?.description}
-                badgeText="Owned by you"
+                badgeText={badgeText}
+                
+                // Existing listing config
+                price={priceStr}
+                isListed={isListed}
+                
+                // New listing config
+                onList={(price) => handleList(card.id, price)}
+                listDisabled={operatingId !== null}
+                listText={
+                  operatingId === card.id 
+                    ? (operationState === "approving" ? "Approving..." : "Listing...") 
+                    : "List Card"
+                }
               />
             );
           })}

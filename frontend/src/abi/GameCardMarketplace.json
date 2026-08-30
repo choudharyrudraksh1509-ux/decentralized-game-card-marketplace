@@ -276,5 +276,49 @@
         "stateMutability":  "view",
         "name":  "tokenOfOwnerByIndex",
         "type":  "function"
+    },
+    {
+        "outputs":  [
+                        {
+                            "internalType":  "bool",
+                            "name":  "",
+                            "type":  "bool"
+                        }
+                    ],
+        "inputs":  [
+                       {
+                           "internalType":  "address",
+                           "name":  "owner",
+                           "type":  "address"
+                       },
+                       {
+                           "internalType":  "address",
+                           "name":  "operator",
+                           "type":  "address"
+                       }
+                   ],
+        "stateMutability":  "view",
+        "name":  "isApprovedForAll",
+        "type":  "function"
+    },
+    {
+        "outputs":  [
+
+                    ],
+        "inputs":  [
+                       {
+                           "internalType":  "address",
+                           "name":  "operator",
+                           "type":  "address"
+                       },
+                       {
+                           "internalType":  "bool",
+                           "name":  "approved",
+                           "type":  "bool"
+                       }
+                   ],
+        "stateMutability":  "nonpayable",
+        "name":  "setApprovalForAll",
+        "type":  "function"
     }
 ]

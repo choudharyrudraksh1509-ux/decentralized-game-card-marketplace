@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 const RARITY_STYLES = {
   Common:    "badge-ash",
@@ -18,12 +18,17 @@ export default function Card({
   onBuy,
   buyDisabled = false,
   buyText = "Buy",
-  badgeText
+  badgeText,
+  isListed = false,
+  onList,
+  listDisabled = false,
+  listText = "List Card"
 }) {
+  const [listPrice, setListPrice] = useState("");
   const badgeClass = RARITY_STYLES[rarity] || "badge-ash";
   
   return (
-    <div className="card-tile group p-4 flex flex-col relative overflow-hidden transition-all duration-300 hover:border-gold/40 hover:-translate-y-1">
+    <div className="card-tile group p-4 flex flex-col relative overflow-hidden transition-all duration-300 hover:border-gold/40 hover:-translate-y-1 bg-charcoal text-ivory">
       {/* Image Section */}
       <div className="relative aspect-[3/4] w-full rounded-xl overflow-hidden bg-obsidian mb-4">
         {image ? (
@@ -66,30 +71,67 @@ export default function Card({
           </p>
         )}
 
-        {/* Action Section: Price and Buy Button */}
-        {(price !== undefined || onBuy) && (
-          <div className="mt-auto pt-4 border-t border-ash flex items-center justify-between">
-            {price !== undefined ? (
-              <div className="flex flex-col">
-                <span className="text-[10px] text-muted uppercase tracking-wider mb-0.5">Price</span>
-                <span className="font-mono text-gold font-bold">
-                  {price} MATIC
-                </span>
-              </div>
-            ) : <div />}
+        {/* Action Section: Price, Buy, and/or List Buttons */}
+        {(price !== undefined || onBuy || (onList && !isListed)) && (
+          <div className="mt-auto pt-4 border-t border-ash flex flex-col gap-3">
+            
+            {/* Price & Buy Button Row */}
+            {(price !== undefined || onBuy) && (
+              <div className="flex items-center justify-between">
+                {price !== undefined ? (
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-muted uppercase tracking-wider mb-0.5">Price</span>
+                    <span className="font-mono text-gold font-bold">
+                      {price} MATIC
+                    </span>
+                  </div>
+                ) : <div />}
 
-            {onBuy && (
-              <button
-                onClick={onBuy}
-                disabled={buyDisabled}
-                className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all
-                  ${buyDisabled 
-                    ? "bg-charcoal text-muted cursor-not-allowed border border-ash"
-                    : "btn-primary shadow-lg shadow-gold/20"
-                  }`}
-              >
-                {buyText}
-              </button>
+                {onBuy && (
+                  <button
+                    onClick={onBuy}
+                    disabled={buyDisabled}
+                    className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all
+                      ${buyDisabled 
+                        ? "bg-obsidian text-muted cursor-not-allowed border border-ash"
+                        : "btn-primary shadow-lg shadow-gold/20"
+                      }`}
+                  >
+                    {buyText}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* List for Sale Input & Button Row */}
+            {(onList && !isListed) && (
+              <div className="flex flex-col gap-2">
+                <input 
+                  type="number" 
+                  min="0"
+                  step="0.01"
+                  placeholder="Price in MATIC" 
+                  value={listPrice}
+                  onChange={(e) => setListPrice(e.target.value)}
+                  className="w-full bg-obsidian border border-ash rounded px-3 py-2 text-sm text-ivory outline-none focus:border-gold/50"
+                  disabled={listDisabled}
+                />
+                <button
+                  onClick={() => {
+                    if (listPrice && parseFloat(listPrice) > 0) {
+                      onList(listPrice);
+                    }
+                  }}
+                  disabled={listDisabled || !listPrice || parseFloat(listPrice) <= 0}
+                  className={`w-full py-2 rounded-lg text-sm font-semibold transition-all
+                    ${listDisabled || !listPrice || parseFloat(listPrice) <= 0
+                      ? "bg-obsidian text-muted cursor-not-allowed border border-ash"
+                      : "btn-primary shadow-lg shadow-gold/20"
+                    }`}
+                >
+                  {listText}
+                </button>
+              </div>
             )}
           </div>
         )}
