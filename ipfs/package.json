@@ -1,0 +1,18 @@
+{
+  "name": "game-card-marketplace-ipfs",
+  "version": "1.0.0",
+  "description": "IPFS upload helpers for game card assets and ERC-721 metadata",
+  "type": "module",
+  "scripts": {
+    "upload-asset":   "node uploadAsset.js",
+    "create-metadata": "node createMetadata.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "mime-types": "^2.1.35",
+    "nft.storage": "^7.1.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base resets ─────────────────────────────────────────── */
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-obsidian text-ivory font-body;
+    background-image: radial-gradient(
+      ellipse at top left,
+      rgba(212, 160, 23, 0.05) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at bottom right,
+      rgba(192, 57, 43, 0.06) 0%,
+      transparent 60%
+    );
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-wide;
+  }
+
+  ::selection {
+    background-color: rgba(212, 160, 23, 0.35);
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-charcoal; }
+  ::-webkit-scrollbar-thumb { background: #a07810; border-radius: 3px; }
+}
+
+/* ── Component utilities ─────────────────────────────────── */
+@layer components {
+  .divider-gold {
+    @apply w-full h-px opacity-40 my-6;
+    background: linear-gradient(90deg, #a07810 0%, #d4a017 50%, #a07810 100%);
+  }
+
+  .card-tile {
+    @apply rounded-xl border border-ash shadow-card
+           transition-all duration-300 hover:border-gold hover:shadow-glow
+           hover:-translate-y-1;
+    background: linear-gradient(135deg, #252525 0%, #1a1a1a 60%, #111111 100%);
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           px-6 py-2.5 rounded-lg font-semibold text-sm tracking-widest uppercase
+           bg-gold text-obsidian
+           hover:bg-gold-light active:bg-gold-dark
+           transition-colors duration-200 shadow-glow;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           px-6 py-2.5 rounded-lg font-semibold text-sm tracking-widest uppercase
+           bg-crimson text-ivory
+           hover:bg-crimson-light active:bg-crimson-dark
+           transition-colors duration-200;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           px-6 py-2.5 rounded-lg font-semibold text-sm tracking-widest uppercase
+           border border-ash text-parchment
+           hover:border-gold hover:text-gold
+           transition-colors duration-200;
+  }
+
+  .badge {
+    @apply inline-block px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold;
+  }
+  .badge-gold    { @apply badge bg-gold/20 text-gold-light border border-gold/30; }
+  .badge-crimson { @apply badge bg-crimson/20 text-crimson-light border border-crimson/30; }
+  .badge-amber   { @apply badge bg-amber/20 text-amber-light border border-amber/30; }
+}

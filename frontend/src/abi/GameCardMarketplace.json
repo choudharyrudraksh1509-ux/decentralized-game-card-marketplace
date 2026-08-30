@@ -1,0 +1,280 @@
+[
+    {
+        "type":  "function",
+        "name":  "mintCard",
+        "inputs":  [
+                       {
+                           "name":  "uri",
+                           "type":  "string",
+                           "internalType":  "string"
+                       }
+                   ],
+        "outputs":  [
+                        {
+                            "name":  "tokenId",
+                            "type":  "uint256",
+                            "internalType":  "uint256"
+                        }
+                    ],
+        "stateMutability":  "nonpayable"
+    },
+    {
+        "type":  "function",
+        "name":  "listCard",
+        "inputs":  [
+                       {
+                           "name":  "tokenId",
+                           "type":  "uint256",
+                           "internalType":  "uint256"
+                       },
+                       {
+                           "name":  "price",
+                           "type":  "uint256",
+                           "internalType":  "uint256"
+                       }
+                   ],
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable"
+    },
+    {
+        "type":  "function",
+        "name":  "cancelListing",
+        "inputs":  [
+                       {
+                           "name":  "tokenId",
+                           "type":  "uint256",
+                           "internalType":  "uint256"
+                       }
+                   ],
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "nonpayable"
+    },
+    {
+        "type":  "function",
+        "name":  "buyCard",
+        "inputs":  [
+                       {
+                           "name":  "tokenId",
+                           "type":  "uint256",
+                           "internalType":  "uint256"
+                       }
+                   ],
+        "outputs":  [
+
+                    ],
+        "stateMutability":  "payable"
+    },
+    {
+        "type":  "function",
+        "name":  "getListing",
+        "inputs":  [
+                       {
+                           "name":  "tokenId",
+                           "type":  "uint256",
+                           "internalType":  "uint256"
+                       }
+                   ],
+        "outputs":  [
+                        {
+                            "name":  "seller",
+                            "type":  "address",
+                            "internalType":  "address"
+                        },
+                        {
+                            "name":  "price",
+                            "type":  "uint256",
+                            "internalType":  "uint256"
+                        },
+                        {
+                            "name":  "isListed",
+                            "type":  "bool",
+                            "internalType":  "bool"
+                        }
+                    ],
+        "stateMutability":  "view"
+    },
+    {
+        "type":  "function",
+        "name":  "nextTokenId",
+        "inputs":  [
+
+                   ],
+        "outputs":  [
+                        {
+                            "name":  "",
+                            "type":  "uint256",
+                            "internalType":  "uint256"
+                        }
+                    ],
+        "stateMutability":  "view"
+    },
+    {
+        "type":  "function",
+        "name":  "tokenURI",
+        "inputs":  [
+                       {
+                           "name":  "tokenId",
+                           "type":  "uint256",
+                           "internalType":  "uint256"
+                       }
+                   ],
+        "outputs":  [
+                        {
+                            "name":  "",
+                            "type":  "string",
+                            "internalType":  "string"
+                        }
+                    ],
+        "stateMutability":  "view"
+    },
+    {
+        "type":  "function",
+        "name":  "ownerOf",
+        "inputs":  [
+                       {
+                           "name":  "tokenId",
+                           "type":  "uint256",
+                           "internalType":  "uint256"
+                       }
+                   ],
+        "outputs":  [
+                        {
+                            "name":  "",
+                            "type":  "address",
+                            "internalType":  "address"
+                        }
+                    ],
+        "stateMutability":  "view"
+    },
+    {
+        "type":  "event",
+        "name":  "CardMinted",
+        "inputs":  [
+                       {
+                           "name":  "tokenId",
+                           "type":  "uint256",
+                           "indexed":  true
+                       },
+                       {
+                           "name":  "owner",
+                           "type":  "address",
+                           "indexed":  true
+                       },
+                       {
+                           "name":  "tokenURI",
+                           "type":  "string",
+                           "indexed":  false
+                       }
+                   ]
+    },
+    {
+        "type":  "event",
+        "name":  "CardListed",
+        "inputs":  [
+                       {
+                           "name":  "tokenId",
+                           "type":  "uint256",
+                           "indexed":  true
+                       },
+                       {
+                           "name":  "seller",
+                           "type":  "address",
+                           "indexed":  true
+                       },
+                       {
+                           "name":  "price",
+                           "type":  "uint256",
+                           "indexed":  false
+                       }
+                   ]
+    },
+    {
+        "type":  "event",
+        "name":  "CardSale",
+        "inputs":  [
+                       {
+                           "name":  "tokenId",
+                           "type":  "uint256",
+                           "indexed":  true
+                       },
+                       {
+                           "name":  "seller",
+                           "type":  "address",
+                           "indexed":  true
+                       },
+                       {
+                           "name":  "buyer",
+                           "type":  "address",
+                           "indexed":  true
+                       },
+                       {
+                           "name":  "price",
+                           "type":  "uint256",
+                           "indexed":  false
+                       }
+                   ]
+    },
+    {
+        "type":  "event",
+        "name":  "ListingCancelled",
+        "inputs":  [
+                       {
+                           "name":  "tokenId",
+                           "type":  "uint256",
+                           "indexed":  true
+                       },
+                       {
+                           "name":  "seller",
+                           "type":  "address",
+                           "indexed":  true
+                       }
+                   ]
+    },
+    {
+        "outputs":  [
+                        {
+                            "internalType":  "uint256",
+                            "name":  "",
+                            "type":  "uint256"
+                        }
+                    ],
+        "inputs":  [
+                       {
+                           "internalType":  "address",
+                           "name":  "owner",
+                           "type":  "address"
+                       }
+                   ],
+        "stateMutability":  "view",
+        "name":  "balanceOf",
+        "type":  "function"
+    },
+    {
+        "outputs":  [
+                        {
+                            "internalType":  "uint256",
+                            "name":  "",
+                            "type":  "uint256"
+                        }
+                    ],
+        "inputs":  [
+                       {
+                           "internalType":  "address",
+                           "name":  "owner",
+                           "type":  "address"
+                       },
+                       {
+                           "internalType":  "uint256",
+                           "name":  "index",
+                           "type":  "uint256"
+                       }
+                   ],
+        "stateMutability":  "view",
+        "name":  "tokenOfOwnerByIndex",
+        "type":  "function"
+    }
+]
