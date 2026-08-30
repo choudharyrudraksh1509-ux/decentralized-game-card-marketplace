@@ -1,56 +1,71 @@
-# 🎴 Decentralized Game Card Marketplace
+# 🎴 Card Nexus — Decentralized Game Card Marketplace
 
-A fully decentralized application (dApp) for minting, buying, and selling digital game cards as ERC-721 NFTs on Polygon.
+A fully decentralized application (dApp) for minting, buying, selling, and burning digital game cards as ERC-721 NFTs on Polygon / Localhost.
 
 ---
 
-## Development Walk-through
+## 🚀 What Makes Card Nexus Unique & Better?
+
+### 🔥 1. On-Chain Deletion via "Burning"
+In traditional web development, deleting data is as simple as running a `DELETE` query. On the blockchain, data is **immutable and permanent**—it can never be deleted from the historical ledger. 
+
+Card Nexus addresses this standard Web3 limitation by implementing a **"Burning"** mechanism (`burnCard`):
+* Users can "delete" a card from their collection by burning it.
+* Under the hood, this transfers the token to the zero address (`0x0000000000000000000000000000000000000000`), permanently removing it from circulation.
+* The contract automatically cancels any active marketplace listings for that card before burning.
+* Once burned, the card disappears from the owner's collection and the marketplace forever.
+
+### 🔄 2. Zero-Refresh Real-Time Syncing
+Many standard dApps suffer from poor user experience, requiring manual page refreshes to see updated listings or balances after a transaction. 
+* Card Nexus utilizes **React Query cache invalidation** hooked into Wagmi transaction receipts.
+* As soon as MetaMask confirms a transaction (Minting, Listing, Canceling, Buying, or Burning), the cache is invalidated in the background.
+* The UI instantly refreshes all collection grids, marketplace grids, history feeds, and ETH/MATIC balances in real-time without requiring a page reload.
+
+### ⚡ 3. Static RPC Event History
+The "History" timeline parses live on-chain smart contract events (`CardMinted`, `CardListed`, `CardSale`, `ListingCancelled`, `CardBurned`).
+* Instead of relying on the active wallet provider (which fails or switches to Mainnet when disconnected), we configure a **dedicated static RPC client** pointing to the target network.
+* This ensures that the history feed is active and displays historical events even when the user's wallet is completely disconnected.
+
+---
+
+## 🛠️ Development & Setup
 
 Follow these steps to set up, test, and deploy the project locally:
 
-### 1. Install dependencies
-Install the root dependencies for the Hardhat environment:
-\\\ash
+### 1. Install Dependencies
+Install dependencies at the project root, frontend, and backend:
+```bash
 npm install
-\\\
-*(Make sure to also run 
-pm install inside the rontend/ and ackend/ directories to install their respective dependencies.)*
+npm install --prefix frontend
+npm install --prefix backend
+```
 
-### 2. Run tests
-Execute the smart contract test suite (using Hardhat and Chai) to ensure all marketplace logic is functioning correctly:
-\\\ash
+### 2. Run Smart Contract Tests
+Execute the unit test suite covering minting, listing, cancelation, buying, re-entrancy, and burn edge-cases (38 tests):
+```bash
 npx hardhat test
-\\\
+```
 
-### 3. Deploy to Mumbai
-Ensure your .env file is properly configured with your API keys and wallet private key. Then, deploy the contract to the Polygon Mumbai testnet:
-\\\ash
-npx hardhat run scripts/deploy.js --network mumbai
-\\\
-*(Remember to copy the deployed contract address to your rontend/.env file!)*
+### 3. Deploy Contract to Local Node
+Start a local Hardhat node:
+```bash
+npx hardhat node
+```
+In a new terminal window, compile and deploy the contract:
+```bash
+npx hardhat run scripts/deploy.js --network localhost
+```
+*Note: Copy the contract address printed in the terminal and update `VITE_CONTRACT_ADDRESS` in `frontend/.env`.*
 
-### 4. Start front-end
-Start the Vite development server to view the application:
-\\\ash
-cd frontend
-npm run dev
-\\\
-*(Note: You will also need to start the backend IPFS bridge by running 
-pm run dev in the ackend/ directory).*
+### 4. Start the Backend Storage Bridge
+Start the local Express server simulating IPFS storage for images and metadata:
+```bash
+npm start --prefix backend
+```
 
----
-
-## Screenshots
-
-> *(Placeholder: Add screenshots of the application below)*
-
-- **Marketplace Gallery**: [Insert screenshot here]
-- **Mint Card Form**: [Insert screenshot here]
-- **My Collection**: [Insert screenshot here]
-
----
-
-## Deployed Application
-
-- **Live Demo URL**: [Insert Deployed Front-end URL Here]
-- **Smart Contract (Polygonscan)**: [Insert Polygonscan Link Here]
+### 5. Start the React Frontend
+Launch the Vite React application:
+```bash
+npm run dev --prefix frontend
+```
+Open [http://localhost:5173](http://localhost:5173) in your browser. Ensure your MetaMask wallet is connected to the Localhost 8545 network.

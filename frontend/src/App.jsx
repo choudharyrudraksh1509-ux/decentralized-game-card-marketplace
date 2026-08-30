@@ -2,23 +2,7 @@ import WalletConnector from "./components/WalletConnector";
 import MintCardForm    from "./components/MintCardForm";
 import MarketplaceGallery from "./components/MarketplaceGallery";
 import MyCollection       from "./components/MyCollection";
-
-// ── Static demo card data ─────────────────────────────────
-const DEMO_CARDS = [
-  { id: 1, name: "Inferno Drake",  rarity: "Legendary", price: "0.42 ETH", edition: "#012 / 100",  tag: "FIRE",   tagClass: "badge-crimson" },
-  { id: 2, name: "Iron Sentinel",  rarity: "Rare",       price: "0.08 ETH", edition: "#204 / 500",  tag: "METAL",  tagClass: "badge-amber"   },
-  { id: 3, name: "Ashen Phantom",  rarity: "Epic",       price: "0.19 ETH", edition: "#051 / 250",  tag: "SHADOW", tagClass: "badge-gold"    },
-  { id: 4, name: "Ember Witch",    rarity: "Uncommon",   price: "0.03 ETH", edition: "#781 / 2000", tag: "FIRE",   tagClass: "badge-crimson" },
-];
-
-const rarityOrder = { Legendary: 1, Epic: 2, Rare: 3, Uncommon: 4, Common: 5 };
-const rarityColor = {
-  Legendary: "text-gold-light",
-  Epic:      "text-crimson-light",
-  Rare:      "text-amber-light",
-  Uncommon:  "text-parchment",
-  Common:    "text-muted",
-};
+import TransactionHistory from "./components/TransactionHistory";
 
 // ── Navbar ────────────────────────────────────────────────
 function Navbar() {
@@ -34,7 +18,7 @@ function Navbar() {
         <nav className="hidden md:flex items-center gap-8 text-sm font-semibold uppercase tracking-widest text-parchment">
           <a href="#marketplace" className="hover:text-gold transition-colors">Marketplace</a>
           <a href="#my-cards"    className="hover:text-gold transition-colors">My Cards</a>
-          <a href="#activity"    className="hover:text-gold transition-colors">Activity</a>
+          <a href="#history"     className="hover:text-gold transition-colors">History</a>
         </nav>
         <div className="flex items-center justify-end min-w-[200px]">
           <WalletConnector />
@@ -82,62 +66,6 @@ function Hero() {
   );
 }
 
-// ── Card Tile ─────────────────────────────────────────────
-function CardTile({ card }) {
-  return (
-    <article className="card-tile p-4 flex flex-col gap-3">
-      <div className="relative rounded-lg overflow-hidden bg-ash aspect-[3/4] flex items-center justify-center">
-        <span className="text-6xl select-none" aria-hidden="true">&#x1F0CF;</span>
-        <div className="absolute top-2 right-2">
-          <span className={card.tagClass}>{card.tag}</span>
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col gap-1">
-        <h3 className="font-display font-semibold text-ivory truncate">{card.name}</h3>
-        <p className={`text-xs font-mono font-bold uppercase tracking-widest ${rarityColor[card.rarity]}`}>
-          {card.rarity}
-        </p>
-        <p className="text-xs text-muted">{card.edition}</p>
-      </div>
-
-      <div className="divider-gold my-0" />
-
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs text-muted uppercase tracking-widest">Price</p>
-          <p className="text-gold font-mono font-bold text-sm">{card.price}</p>
-        </div>
-        <button className="btn-primary text-xs px-4 py-2">Buy Now</button>
-      </div>
-    </article>
-  );
-}
-
-// ── Marketplace ───────────────────────────────────────────
-function Marketplace() {
-  const sorted = [...DEMO_CARDS].sort((a, b) => rarityOrder[a.rarity] - rarityOrder[b.rarity]);
-  return (
-    <section id="marketplace" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-      <div className="flex items-end justify-between mb-8">
-        <div>
-          <h2 className="font-display text-3xl font-bold text-ivory uppercase tracking-widest">Marketplace</h2>
-          <p className="text-muted text-sm mt-1">Sorted by rarity · Live on-chain</p>
-        </div>
-        <div className="flex gap-2">
-          <button className="btn-ghost text-xs px-3 py-1.5">All</button>
-          <button className="btn-ghost text-xs px-3 py-1.5">Fire</button>
-          <button className="btn-ghost text-xs px-3 py-1.5">Metal</button>
-          <button className="btn-ghost text-xs px-3 py-1.5">Shadow</button>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {sorted.map((card) => <CardTile key={card.id} card={card} />)}
-      </div>
-    </section>
-  );
-}
-
 // ── Footer ────────────────────────────────────────────────
 function Footer() {
   return (
@@ -158,6 +86,7 @@ export default function App() {
       <main className="flex-1">
         <Hero />
         <div className="divider-gold max-w-7xl mx-auto px-8" />
+        
         {/* Mint section */}
         <section id="mint" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="mb-8">
@@ -170,10 +99,16 @@ export default function App() {
           </div>
           <MintCardForm />
         </section>
+        
         <div className="divider-gold max-w-7xl mx-auto px-8" />
         <MarketplaceGallery />
+        
         <div className="divider-gold max-w-7xl mx-auto px-8" />
         <MyCollection />
+        
+        <div className="divider-gold max-w-7xl mx-auto px-8" />
+        <TransactionHistory />
+
       </main>
       <Footer />
     </div>

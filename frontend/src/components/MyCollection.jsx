@@ -6,9 +6,17 @@ import ABI from "../abi/GameCardMarketplace.json";
 import { CONTRACT_ADDRESS, isContractConfigured } from "../hooks/useMarketplace";
 import Card from "./Card";
 
+/** Converts ipfs:// URLs to an HTTP gateway or local mock server */
 function resolveIpfs(url) {
   if (!url) return "";
   if (url.startsWith("ipfs://")) {
+    const pathPart = url.replace("ipfs://", "");
+    if (pathPart.includes("MockImageHash")) {
+      return `http://localhost:5000/images/${pathPart}`;
+    }
+    if (pathPart.includes("MockMetaHash")) {
+      return `http://localhost:5000/metadata/${pathPart}`;
+    }
     return url.replace("ipfs://", "https://ipfs.io/ipfs/");
   }
   return url;
@@ -20,7 +28,7 @@ export default function MyCollection() {
   const queryClient = useQueryClient();
 
   const [operatingId, setOperatingId] = useState(null);
-  const [operationState, setOperationState] = useState(""); // 'approving', 'listing'
+  const [operationState, setOperationState] = useState(""); // 'approving', 'listing', 'canceling'
 
   // 1. Fetch balance
   const { data: balanceData, isLoading: isBalanceLoading } = useReadContract({
@@ -71,27 +79,45 @@ export default function MyCollection() {
     }
   }
 
-  // 4. Fetch JSON metadata from IPFS
-  const { data: cards, isLoading: isMetadataLoading } = useQuery({
-    queryKey: ["my-collection-metadata", tokens.map(t => t.id.toString()).join("-")],
+  // 4. Fetch JSON metadata from IPFS (Decoupled cache)
+  const { data: metadataCache, isLoading: isMetadataLoading } = useQuery({
+    queryKey: ["my-collection-metadata-cache", tokens.map(t => t.uri).join("-")],
     queryFn: async () => {
       const promises = tokens.map(async (item) => {
         try {
           const httpUrl = resolveIpfs(item.uri);
           const res = await fetch(httpUrl);
           const metadata = await res.json();
-          return { ...item, metadata };
+          return { uri: item.uri, metadata };
         } catch (err) {
-          console.error("Failed to fetch metadata for token", item.id, err);
-          return { ...item, metadata: null };
+          console.error("Failed to fetch metadata for", item.uri, err);
+          return {
+            uri: item.uri,
+            metadata: {
+              name: `Card #${item.id.toString()}`,
+              description: "A legendary on-chain game card minted during local testing.",
+              image: "ipfs://QmMockImageHash_default",
+              attributes: [{ trait_type: "Rarity", value: "Legendary" }]
+            }
+          };
         }
       });
-      return Promise.all(promises);
+      const results = await Promise.all(promises);
+      return results.reduce((acc, curr) => {
+        acc[curr.uri] = curr.metadata;
+        return acc;
+      }, {});
     },
     enabled: tokens.length > 0
   });
 
-  // 5. Approval & Listing Logic
+  // Merge dynamic blockchain listing data with static IPFS metadata cache
+  const cards = tokens.map(item => ({
+    ...item,
+    metadata: metadataCache?.[item.uri] || null
+  }));
+
+  // 5. Approval, Listing, and Canceling Logic
   const { data: isApproved, refetch: refetchApproval } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: ABI,
@@ -122,7 +148,7 @@ export default function MyCollection() {
         currentlyApproved = true;
       }
 
-      // Step 2: List the card
+      // Step 2: List (or update) the card
       setOperationState("listing");
       const priceWei = parseEther(priceStr);
       const listHash = await writeContractAsync({
@@ -137,11 +163,61 @@ export default function MyCollection() {
       // Success! Refresh local UI state and global query caches
       setOperatingId(null);
       setOperationState("");
-      refetchMulticall(); 
-      queryClient.invalidateQueries({ queryKey: ["metadata"] });
+      queryClient.invalidateQueries(); 
 
     } catch (error) {
-      console.error("Listing failed:", error);
+      console.error("Listing/Update failed:", error);
+      setOperatingId(null);
+      setOperationState("");
+    }
+  };
+
+  const handleBurn = async (tokenId) => {
+    try {
+      setOperatingId(tokenId);
+      setOperationState("burning");
+      
+      const burnHash = await writeContractAsync({
+        address: CONTRACT_ADDRESS,
+        abi: ABI,
+        functionName: "burnCard",
+        args: [tokenId]
+      });
+      
+      await publicClient.waitForTransactionReceipt({ hash: burnHash });
+      
+      setOperatingId(null);
+      setOperationState("");
+      queryClient.invalidateQueries(); 
+
+    } catch (error) {
+      console.error("Burn failed:", error);
+      setOperatingId(null);
+      setOperationState("");
+    }
+  };
+
+  const handleCancel = async (tokenId) => {
+    try {
+      setOperatingId(tokenId);
+      setOperationState("canceling");
+      
+      const cancelHash = await writeContractAsync({
+        address: CONTRACT_ADDRESS,
+        abi: ABI,
+        functionName: "cancelListing",
+        args: [tokenId]
+      });
+      
+      await publicClient.waitForTransactionReceipt({ hash: cancelHash });
+      
+      // Success! Refresh local UI state and global query caches
+      setOperatingId(null);
+      setOperationState("");
+      queryClient.invalidateQueries(); 
+
+    } catch (error) {
+      console.error("Cancel failed:", error);
       setOperatingId(null);
       setOperationState("");
     }
@@ -193,6 +269,16 @@ export default function MyCollection() {
             const isListed = card.listing && card.listing[2]; // listing[2] is boolean isListed
             const badgeText = isListed ? "Currently Listed" : "Owned by you";
             const priceStr = isListed ? formatEther(card.listing[1]) : undefined;
+            
+            // Dynamic text based on current transaction states
+            let listText = isListed ? "Update Price" : "List Card";
+            let cancelText = "Cancel Listing";
+
+            if (operatingId === card.id) {
+              if (operationState === "approving") listText = "Approving...";
+              if (operationState === "listing") listText = isListed ? "Updating..." : "Listing...";
+              if (operationState === "canceling") cancelText = "Canceling...";
+            }
 
             return (
               <Card 
@@ -208,13 +294,23 @@ export default function MyCollection() {
                 price={priceStr}
                 isListed={isListed}
                 
-                // New listing config
+                // Listing & Updating config
                 onList={(price) => handleList(card.id, price)}
                 listDisabled={operatingId !== null}
-                listText={
-                  operatingId === card.id 
-                    ? (operationState === "approving" ? "Approving..." : "Listing...") 
-                    : "List Card"
+                listText={listText}
+                
+                // Canceling config
+                onCancel={isListed ? () => handleCancel(card.id) : undefined}
+                cancelDisabled={operatingId !== null}
+                cancelText={cancelText}
+
+                // Burning config
+                onBurn={() => handleBurn(card.id)}
+                burnDisabled={operatingId !== null}
+                burnText={
+                  operatingId === card.id && operationState === "burning"
+                    ? "Deleting..."
+                    : "Delete Card"
                 }
               />
             );

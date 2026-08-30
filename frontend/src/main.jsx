@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import { WagmiProvider } from "wagmi";
-import { mainnet, sepolia } from "wagmi/chains";
+import { mainnet, sepolia, polygonMumbai, hardhat } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
@@ -14,7 +14,7 @@ import "./index.css";
 const config = getDefaultConfig({
   appName: "Card Nexus",
   projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? "YOUR_PROJECT_ID",
-  chains: [mainnet, sepolia],
+  chains: [mainnet, sepolia, polygonMumbai, hardhat],
 });
 
 const queryClient = new QueryClient();

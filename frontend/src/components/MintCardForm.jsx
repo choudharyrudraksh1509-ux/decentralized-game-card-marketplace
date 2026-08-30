@@ -15,8 +15,9 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useAccount } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMintCard, isContractConfigured, CONTRACT_ADDRESS } from "../hooks/useMarketplace";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -276,6 +277,8 @@ function MintProgress({ stage, txHash, tokenId }) {
 
 export default function MintCardForm({ onMintSuccess }) {
   const { isConnected } = useAccount();
+  const queryClient = useQueryClient();
+
 
   // Form state
   const [image,        setImage]        = useState(null);
@@ -293,11 +296,17 @@ export default function MintCardForm({ onMintSuccess }) {
   const [mintStage,    setMintStage]    = useState("idle");
   const [stageError,   setStageError]  = useState(null);
 
-  const { mintCard, stage: wagmiStage, txHash, tokenId, error: wagmiError, reset: resetWagmi }
-    = useMintCard();
+  const { mintCard, stage: wagmiStage, txHash, tokenId, error: wagmiError, reset: resetWagmi } = useMintCard();
+
+  useEffect(() => {
+    if (wagmiStage === "success") {
+      queryClient.invalidateQueries();
+      onMintSuccess?.();
+    }
+  }, [wagmiStage, queryClient, onMintSuccess]);
 
   // Merged stage: our local IPFS stages take priority, then wagmi's stage
-  const effectiveStage = ["uploading-image","creating-meta"].includes(mintStage)
+  const effectiveStage = ["uploading-image","creating-meta","error"].includes(mintStage)
     ? mintStage
     : wagmiStage;
 
@@ -364,7 +373,7 @@ export default function MintCardForm({ onMintSuccess }) {
 
     } catch (err) {
       setStageError(err.message ?? "An error occurred.");
-      setMintStage("idle");
+      setMintStage("error");
     }
   }, [image, name, description, rarity, mintCard, onMintSuccess]);
 

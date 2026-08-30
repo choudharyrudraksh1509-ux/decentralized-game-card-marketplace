@@ -1,6 +1,6 @@
 /**
  * WalletConnector.jsx
- * ─────────────────────────────────────────────────────────────────────────────
+ * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  * Self-contained wallet connection widget.
  *
  * What it does:
@@ -8,13 +8,13 @@
  *   - Renders a "Connect Wallet" button (delegates to RainbowKit modal for
  *     multi-wallet support, plus a quick-connect for injected providers).
  *   - Once connected, shows a shortened address pill + Copy + Disconnect.
- *   - If the connected chain is NOT Polygon Mumbai (80001), renders a
+ *   - If the connected chain is NOT {targetChainName} (80001), renders a
  *     prominent warning banner with a one-click "Switch Network" button
  *     that calls wallet_switchEthereumChain (+ wallet_addEthereumChain if
  *     the chain is not yet registered in the wallet).
  *
  * Export: default WalletConnector
- * ─────────────────────────────────────────────────────────────────────────────
+ * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -23,7 +23,7 @@ import { injected } from "wagmi/connectors";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useNetworkGuard, MUMBAI_CHAIN_ID } from "../hooks/useNetworkGuard";
 
-// ── Utilities ─────────────────────────────────────────────────────────────────
+// â”€â”€ Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Format:  0x1234...5678  */
 function shortenAddress(addr) {
@@ -42,16 +42,16 @@ function detectProvider() {
   };
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Small badge indicating which provider was detected. */
 function ProviderBadge({ info }) {
   if (!info) return null;
   const [label, emoji] = info.isMetaMask
-    ? ["MetaMask", "🦊"]
+    ? ["MetaMask", "ðŸ¦Š"]
     : info.isCoinbase
-    ? ["Coinbase", "🔵"]
-    : ["Injected", "💼"];
+    ? ["Coinbase", "ðŸ”µ"]
+    : ["Injected", "ðŸ’¼"];
   return (
     <span className="badge badge-amber gap-1 text-[10px] tracking-widest">
       {emoji} {label} detected
@@ -60,7 +60,7 @@ function ProviderBadge({ info }) {
 }
 
 /** Wrong-network banner. */
-function NetworkWarningBanner({ currentChainId, onSwitch, switching, error }) {
+function NetworkWarningBanner({ currentChainId, onSwitch, switching, error, targetChainName }) {
   return (
     <div
       role="alert"
@@ -69,14 +69,14 @@ function NetworkWarningBanner({ currentChainId, onSwitch, switching, error }) {
                  justify-between gap-3"
     >
       <div className="flex items-start gap-2">
-        <span className="text-crimson-light text-lg leading-none mt-0.5" aria-hidden>⚠️</span>
+        <span className="text-crimson-light text-lg leading-none mt-0.5" aria-hidden>âš ï¸</span>
         <div>
           <p className="text-crimson-light font-semibold text-sm">Wrong Network</p>
           <p className="text-muted text-xs mt-0.5">
             Connected to chain{" "}
             <code className="font-mono text-parchment">{currentChainId}</code>.
             {" "}This dApp requires{" "}
-            <span className="text-parchment font-semibold">Polygon Mumbai</span>
+            <span className="text-parchment font-semibold">{targetChainName}</span>
             {" "}(chain <code className="font-mono text-parchment">{MUMBAI_CHAIN_ID}</code>).
           </p>
           {error && (
@@ -93,7 +93,7 @@ function NetworkWarningBanner({ currentChainId, onSwitch, switching, error }) {
       >
         {switching
           ? <><span className="animate-spin inline-block mr-1">&#x27F3;</span>Switching&hellip;</>
-          : "Switch to Mumbai"}
+          : "Switch to {targetChainName}"}
       </button>
     </div>
   );
@@ -113,7 +113,7 @@ function ConnectedPill({ address, onDisconnect, openAccountModal }) {
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Address pill — opens RainbowKit account modal on click */}
+      {/* Address pill â€” opens RainbowKit account modal on click */}
       <button
         onClick={openAccountModal}
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg
@@ -135,7 +135,7 @@ function ConnectedPill({ address, onDisconnect, openAccountModal }) {
         title="Copy full address"
         aria-label="Copy address to clipboard"
       >
-        {copied ? "✓ Copied" : "Copy"}
+        {copied ? "âœ“ Copied" : "Copy"}
       </button>
 
       {/* Disconnect */}
@@ -151,7 +151,7 @@ function ConnectedPill({ address, onDisconnect, openAccountModal }) {
   );
 }
 
-// ── Main Export ───────────────────────────────────────────────────────────────
+// â”€â”€ Main Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function WalletConnector() {
   const { address, isConnected, isConnecting, isReconnecting } = useAccount();
@@ -160,13 +160,7 @@ export default function WalletConnector() {
 
   const [providerInfo, setProviderInfo] = useState(null);
 
-  const {
-    currentChainId,
-    isCorrectNetwork,
-    switching,
-    switchToTarget,
-    error: networkError,
-  } = useNetworkGuard(MUMBAI_CHAIN_ID);
+  const { currentChainId, isCorrectNetwork, switching, switchToTarget, error: networkError, targetChainName } = useNetworkGuard(MUMBAI_CHAIN_ID);
 
   // Detect provider once on mount; re-detect on account changes.
   useEffect(() => {
@@ -181,10 +175,10 @@ export default function WalletConnector() {
   return (
     <div className="flex flex-col gap-2 items-start w-full">
 
-      {/* Provider badge — visible only when disconnected */}
+      {/* Provider badge â€” visible only when disconnected */}
       {!isConnected && <ProviderBadge info={providerInfo} />}
 
-      {/* ── Connection controls via RainbowKit Custom render prop ── */}
+      {/* â”€â”€ Connection controls via RainbowKit Custom render prop â”€â”€ */}
       <ConnectButton.Custom>
         {({ account, chain, openConnectModal, openAccountModal, mounted }) => {
 
@@ -197,7 +191,7 @@ export default function WalletConnector() {
             );
           }
 
-          // ── Disconnected state ─────────────────────────────────────────────
+          // â”€â”€ Disconnected state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (!isConnected) {
             return (
               <div className="flex items-center gap-2 flex-wrap">
@@ -220,14 +214,14 @@ export default function WalletConnector() {
                     className="btn-ghost text-xs disabled:opacity-60 disabled:cursor-not-allowed"
                     title={`Quick-connect with ${providerInfo.isMetaMask ? "MetaMask" : "injected wallet"}`}
                   >
-                    {providerInfo.isMetaMask ? "🦊" : "💼"} Quick Connect
+                    {providerInfo.isMetaMask ? "ðŸ¦Š" : "ðŸ’¼"} Quick Connect
                   </button>
                 )}
               </div>
             );
           }
 
-          // ── Connected state ────────────────────────────────────────────────
+          // â”€â”€ Connected state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           return (
             <ConnectedPill
               address={address}
@@ -238,13 +232,14 @@ export default function WalletConnector() {
         }}
       </ConnectButton.Custom>
 
-      {/* ── Network guard ───────────────────────────────────────────── */}
+      {/* â”€â”€ Network guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {isConnected && !isCorrectNetwork && (
         <NetworkWarningBanner
           currentChainId={currentChainId}
           onSwitch={switchToTarget}
           switching={switching}
           error={networkError}
+          targetChainName={targetChainName}
         />
       )}
 
@@ -252,7 +247,7 @@ export default function WalletConnector() {
       {isConnected && isCorrectNetwork && (
         <p className="text-xs text-muted flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-gold inline-block" aria-hidden />
-          Polygon Mumbai
+          {targetChainName}
         </p>
       )}
     </div>

@@ -32,6 +32,7 @@ contract GameCardMarketplace is
     event CardListed(uint256 indexed tokenId, address indexed seller, uint256 price);
     event CardSale(uint256 indexed tokenId, address indexed seller, address indexed buyer, uint256 price);
     event ListingCancelled(uint256 indexed tokenId, address indexed seller);
+    event CardBurned(uint256 indexed tokenId, address indexed owner);
 
     constructor(address initialOwner)
         ERC721("GameCard", "GCARD")
@@ -82,6 +83,15 @@ contract GameCardMarketplace is
         require(sent, "GameCard: ETH transfer failed");
 
         emit CardSale(tokenId, seller, msg.sender, price);
+    }
+
+    function burnCard(uint256 tokenId) external {
+        require(ownerOf(tokenId) == msg.sender, "GameCard: not token owner");
+        if (listings[tokenId].isListed) {
+            listings[tokenId].isListed = false;
+        }
+        _burn(tokenId);
+        emit CardBurned(tokenId, msg.sender);
     }
 
     function withdraw() external onlyOwner {

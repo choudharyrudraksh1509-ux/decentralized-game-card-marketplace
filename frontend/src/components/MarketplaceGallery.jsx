@@ -1,16 +1,23 @@
 import { useState, useEffect } from "react";
 import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatEther } from "viem";
 import ABI from "../abi/GameCardMarketplace.json";
 import { CONTRACT_ADDRESS, isContractConfigured } from "../hooks/useMarketplace";
 
 import Card from "./Card";
 
-/** Converts ipfs:// URLs to an HTTP gateway */
+/** Converts ipfs:// URLs to an HTTP gateway or local mock server */
 function resolveIpfs(url) {
   if (!url) return "";
   if (url.startsWith("ipfs://")) {
+    const pathPart = url.replace("ipfs://", "");
+    if (pathPart.includes("MockImageHash")) {
+      return `http://localhost:5000/images/${pathPart}`;
+    }
+    if (pathPart.includes("MockMetaHash")) {
+      return `http://localhost:5000/metadata/${pathPart}`;
+    }
     return url.replace("ipfs://", "https://ipfs.io/ipfs/");
   }
   return url;
@@ -26,6 +33,7 @@ const RARITY_STYLES = {
 
 export default function MarketplaceGallery() {
   const { address: userAddress } = useAccount();
+  const queryClient = useQueryClient();
   const [buyingId, setBuyingId] = useState(null);
   
   // 1. Fetch nextTokenId to know how many tokens exist
@@ -68,25 +76,43 @@ export default function MarketplaceGallery() {
     }
   }
 
-  // 3. Fetch JSON metadata from IPFS for active listings
-  const { data: cards, isLoading: isMetadataLoading } = useQuery({
-    queryKey: ["metadata", activeListings.map(l => l.id.toString()).join("-")],
+  // 3. Fetch JSON metadata from IPFS for active listings (Decoupled cache)
+  const { data: metadataCache, isLoading: isMetadataLoading } = useQuery({
+    queryKey: ["metadata-cache", activeListings.map(l => l.uri).join("-")],
     queryFn: async () => {
       const promises = activeListings.map(async (item) => {
         try {
           const httpUrl = resolveIpfs(item.uri);
           const res = await fetch(httpUrl);
           const metadata = await res.json();
-          return { ...item, metadata };
+          return { uri: item.uri, metadata };
         } catch (err) {
-          console.error("Failed to fetch metadata for token", item.id, err);
-          return { ...item, metadata: null };
+          console.error("Failed to fetch metadata for", item.uri, err);
+          return {
+            uri: item.uri,
+            metadata: {
+              name: `Card #${item.id.toString()}`,
+              description: "A legendary on-chain game card minted during local testing.",
+              image: "ipfs://QmMockImageHash_default",
+              attributes: [{ trait_type: "Rarity", value: "Legendary" }]
+            }
+          };
         }
       });
-      return Promise.all(promises);
+      const results = await Promise.all(promises);
+      return results.reduce((acc, curr) => {
+        acc[curr.uri] = curr.metadata;
+        return acc;
+      }, {});
     },
     enabled: activeListings.length > 0
   });
+
+  // Merge dynamic blockchain listing data with static IPFS metadata cache
+  const cards = activeListings.map(item => ({
+    ...item,
+    metadata: metadataCache?.[item.uri] || null
+  }));
 
   // 4. Buying logic
   const { writeContractAsync, isPending: isWritePending } = useWriteContract();
@@ -101,9 +127,9 @@ export default function MarketplaceGallery() {
     if (isConfirmed) {
       setBuyingId(null);
       setTxHash(null);
-      refetchMulticall(); // Refresh listings after purchase
+      queryClient.invalidateQueries(); // Invalidate and reload all blockchain/metadata queries
     }
-  }, [isConfirmed, refetchMulticall]);
+  }, [isConfirmed, queryClient]);
 
   const handleBuy = async (id, price) => {
     try {
@@ -172,7 +198,6 @@ export default function MarketplaceGallery() {
             
             // Extract attributes from metadata
             const rarity = card.metadata?.attributes?.find(a => a.trait_type === "Rarity")?.value || "Common";
-            const badgeClass = RARITY_STYLES[rarity] || "badge-ash";
             const imageUrl = resolveIpfs(card.metadata?.image);
 
             return (
