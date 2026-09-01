@@ -1,0 +1,11 @@
+{
+  "name": "iron",
+  "description": "man",
+  "image": "ipfs://QmMockImageHash_1788282037695.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Common"
+    }
+  ]
+}

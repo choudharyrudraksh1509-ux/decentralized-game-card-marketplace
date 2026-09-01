@@ -1,0 +1,11 @@
+{
+  "name": "Shadow Assassin",
+  "description": "A silent warrior who strikes from the dark.",
+  "image": "ipfs://QmMockImageHash_1788109615458.webp",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Epic"
+    }
+  ]
+}

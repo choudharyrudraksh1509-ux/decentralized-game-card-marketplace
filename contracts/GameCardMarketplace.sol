@@ -27,12 +27,19 @@ contract GameCardMarketplace is
     }
 
     mapping(uint256 => Listing) public listings;
+    
+    // --- Anti-Duplication Copyright Registry ---
+    mapping(bytes32 => bool) public registeredHashes;
+    mapping(uint256 => bytes32) public tokenHashes;
 
     event CardMinted(uint256 indexed tokenId, address indexed owner, string tokenURI);
     event CardListed(uint256 indexed tokenId, address indexed seller, uint256 price);
     event CardSale(uint256 indexed tokenId, address indexed seller, address indexed buyer, uint256 price);
     event ListingCancelled(uint256 indexed tokenId, address indexed seller);
     event CardBurned(uint256 indexed tokenId, address indexed owner);
+    
+    // --- Anti-Duplication Event ---
+    event CardCopyrightRegistered(uint256 indexed tokenId, bytes32 indexed contentHash, address indexed owner);
 
     constructor(address initialOwner)
         ERC721("GameCard", "GCARD")
@@ -45,6 +52,22 @@ contract GameCardMarketplace is
         _safeMint(msg.sender, tokenId);
         _setTokenURI(tokenId, uri);
         emit CardMinted(tokenId, msg.sender, uri);
+    }
+    
+    // --- New Anti-Duplication Minting Function ---
+    function mintCardWithHash(string memory uri, bytes32 contentHash) external returns (uint256 tokenId) {
+        require(!registeredHashes[contentHash], "Copyright Violation: Duplicate card hash detected!");
+        registeredHashes[contentHash] = true;
+        
+        tokenId = nextTokenId;
+        tokenHashes[tokenId] = contentHash;
+        nextTokenId++;
+        
+        _safeMint(msg.sender, tokenId);
+        _setTokenURI(tokenId, uri);
+        
+        emit CardMinted(tokenId, msg.sender, uri);
+        emit CardCopyrightRegistered(tokenId, contentHash, msg.sender);
     }
 
     function listCard(uint256 tokenId, uint256 price) external {
@@ -90,6 +113,13 @@ contract GameCardMarketplace is
         if (listings[tokenId].isListed) {
             listings[tokenId].isListed = false;
         }
+
+        bytes32 hashToUnregister = tokenHashes[tokenId];
+        if (hashToUnregister != bytes32(0)) {
+            registeredHashes[hashToUnregister] = false;
+            delete tokenHashes[tokenId];
+        }
+
         _burn(tokenId);
         emit CardBurned(tokenId, msg.sender);
     }

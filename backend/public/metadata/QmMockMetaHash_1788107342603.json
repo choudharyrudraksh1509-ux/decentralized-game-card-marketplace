@@ -1,0 +1,11 @@
+{
+  "name": "Iron Man",
+  "description": "Legend",
+  "image": "ipfs://QmMockImageHash_1788107342205.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Rare"
+    }
+  ]
+}

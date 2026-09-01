@@ -1,0 +1,11 @@
+{
+  "name": "SSD",
+  "description": "sf",
+  "image": "ipfs://QmMockImageHash_1788285426354.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Rare"
+    }
+  ]
+}

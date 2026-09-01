@@ -1,0 +1,11 @@
+{
+  "name": "IronMan",
+  "description": "Legend in his own way.",
+  "image": "ipfs://QmMockImageHash_1788108852268.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Legendary"
+    }
+  ]
+}

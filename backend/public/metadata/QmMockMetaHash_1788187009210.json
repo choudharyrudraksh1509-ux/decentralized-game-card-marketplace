@@ -1,0 +1,11 @@
+{
+  "name": "Shadow Assassin",
+  "description": "Ancient Warrior",
+  "image": "ipfs://QmMockImageHash_1788187009194.webp",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Epic"
+    }
+  ]
+}

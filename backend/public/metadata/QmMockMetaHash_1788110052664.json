@@ -1,0 +1,11 @@
+{
+  "name": "IronMan",
+  "description": "Genius, Billionaire, Playboy, Philanthropist.",
+  "image": "ipfs://QmMockImageHash_1788110052651.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Rare"
+    }
+  ]
+}

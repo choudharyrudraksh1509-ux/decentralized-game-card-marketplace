@@ -1,0 +1,11 @@
+{
+  "name": "mi",
+  "description": "ajdh",
+  "image": "ipfs://QmMockImageHash_1788282158171.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Uncommon"
+    }
+  ]
+}

@@ -4,3 +4,6 @@ dist/
 .cache/
 artifacts/
 cache/
+*.sqlite
+backend/database.sqlite
+backend/uploads/

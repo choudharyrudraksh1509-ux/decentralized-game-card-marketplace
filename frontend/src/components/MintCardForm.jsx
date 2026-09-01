@@ -5,25 +5,23 @@
  *
  * Step 1 – Image upload to IPFS (POST /api/ipfs/upload-asset)
  * Step 2 – Metadata creation on IPFS (POST /api/ipfs/create-metadata)
- * Step 3 – On-chain mintCard() via wagmi writeContract
+ * Step 3 – On-chain mintCardWithHash() via wagmi writeContract
  * Step 4 – Wait for transaction confirmation + parse CardMinted event
- *
- * Requires:
- *   - frontend/.env: VITE_CONTRACT_ADDRESS=0x...
- *   - backend server running on http://localhost:3001
- *   - Wallet connected and on Polygon Mumbai
+ * Step 5 – Finalize Copyright mapping in backend & Invalidate Caches
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMintCard, isContractConfigured, CONTRACT_ADDRESS } from "../hooks/useMarketplace";
+import { useAuth } from "../context/AuthContext";
+import { finalizeCopyright } from "../api/auth";
+import ABI from "../abi/GameCardMarketplace.json";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:5000";
-
 const RARITIES = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
 
 const RARITY_STYLES = {
@@ -46,8 +44,11 @@ async function apiUploadAsset(file) {
     body:   form,
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`);
-  return data.cid; // "ipfs://..."
+  if (!res.ok) {
+    if (res.status === 409) throw new Error(`COPYRIGHT_VIOLATION:${data.error}`);
+    throw new Error(data.error ?? `Upload failed (${res.status})`);
+  }
+  return data; // { cid, image_hash }
 }
 
 async function apiCreateMetadata({ name, description, imageCID, rarity, attributes }) {
@@ -57,8 +58,11 @@ async function apiCreateMetadata({ name, description, imageCID, rarity, attribut
     body:    JSON.stringify({ name, description, imageCID, rarity }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? `Metadata failed (${res.status})`);
-  return data.cid; // "ipfs://..."
+  if (!res.ok) {
+    if (res.status === 409) throw new Error(`COPYRIGHT_VIOLATION:${data.error}`);
+    throw new Error(data.error ?? `Metadata failed (${res.status})`);
+  }
+  return data; // { cid, metadata_hash }
 }
 
 // ── Validation ────────────────────────────────────────────────────────────────
@@ -81,10 +85,10 @@ function validate({ image, name, description, rarity }) {
 
 const STAGE_LABELS = {
   "idle":           null,
-  "uploading-image":"Uploading image to IPFS\u2026",
-  "creating-meta":  "Creating metadata on IPFS\u2026",
-  "confirm-tx":     "Waiting for wallet confirmation\u2026",
-  "pending-tx":     "Transaction submitted \u2014 waiting for confirmation\u2026",
+  "uploading-image":"Uploading image to IPFS…",
+  "creating-meta":  "Creating metadata on IPFS…",
+  "confirm-tx":     "Waiting for wallet confirmation…",
+  "pending-tx":     "Transaction submitted — waiting for confirmation…",
   "success":        "Minted successfully!",
   "error":          null,
 };
@@ -102,173 +106,90 @@ function FieldError({ msg }) {
 
 function Label({ children, required }) {
   return (
-    <label className="block text-xs font-semibold uppercase tracking-widest text-parchment mb-1.5">
+    <label className="block text-xs font-bold text-muted uppercase tracking-widest mb-1.5">
       {children}
-      {required && <span className="text-crimson-light ml-0.5" aria-hidden>*</span>}
+      {required && <span className="text-crimson ml-1" aria-hidden>*</span>}
     </label>
   );
 }
 
-function InputField({ id, label, error, required, textarea, ...props }) {
-  const cls = `w-full bg-charcoal border rounded-lg px-3 py-2.5 text-ivory text-sm
-               placeholder:text-muted outline-none transition-colors duration-150
-               focus:border-gold focus:ring-1 focus:ring-gold/30
-               disabled:opacity-50 disabled:cursor-not-allowed
-               ${error ? "border-crimson/60" : "border-ash"}`;
+function InputField({ id, label, required, error, textarea, ...props }) {
+  const Comp = textarea ? "textarea" : "input";
   return (
     <div>
-      {label && <Label required={required}>{label}</Label>}
-      {textarea
-        ? <textarea id={id} className={`${cls} resize-none`} {...props} />
-        : <input   id={id} className={cls} {...props} />}
+      <Label htmlFor={id} required={required}>{label}</Label>
+      <Comp
+        id={id}
+        className={`w-full bg-graphite border rounded-lg px-4 py-2.5 text-ivory placeholder-muted/50
+                    focus:outline-none focus:ring-1 focus:ring-gold transition-colors
+                    ${error ? "border-crimson" : "border-ash"}`}
+        aria-invalid={Boolean(error)}
+        {...props}
+      />
       <FieldError msg={error} />
     </div>
   );
 }
 
-/** Drag-and-drop / click image picker */
 function ImagePicker({ onChange, preview, error, disabled }) {
-  const inputRef = useRef(null);
-  const [dragging, setDragging] = useState(false);
-
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) onChange(file);
-  }, [onChange]);
-
+  const fileInputRef = useRef(null);
   return (
     <div>
       <Label required>Card Artwork</Label>
       <div
-        role="button"
-        tabIndex={0}
-        aria-label="Drop or click to select card image"
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={handleDrop}
-        onClick={() => !disabled && inputRef.current?.click()}
-        onKeyDown={(e) => e.key === "Enter" && !disabled && inputRef.current?.click()}
-        className={`relative rounded-xl border-2 border-dashed transition-colors duration-200
-                    flex flex-col items-center justify-center cursor-pointer
-                    overflow-hidden min-h-[180px]
-                    ${dragging ? "border-gold bg-gold/10" : error ? "border-crimson/60 bg-crimson/5" : "border-ash hover:border-gold/50 bg-charcoal"}
-                    ${disabled ? "pointer-events-none opacity-50" : ""}`}
+        className={`relative w-full aspect-[3/4] max-h-[300px] flex items-center justify-center
+                    rounded-xl border-2 border-dashed overflow-hidden bg-graphite transition-colors
+                    ${error ? "border-crimson" : "border-ash"}
+                    ${disabled ? "opacity-50 pointer-events-none" : "hover:border-gold/50 cursor-pointer"}`}
+        onClick={() => fileInputRef.current?.click()}
       >
         {preview ? (
-          <>
-            <img
-              src={preview}
-              alt="Card preview"
-              className="absolute inset-0 w-full h-full object-cover opacity-80"
-            />
-            <div className="relative z-10 bg-obsidian/70 rounded-lg px-3 py-1 text-xs text-parchment">
-              Click to change
-            </div>
-          </>
+          <img src={preview} alt="Artwork preview" className="w-full h-full object-cover" />
         ) : (
-          <div className="flex flex-col items-center gap-2 p-6 text-center pointer-events-none">
-            <span className="text-3xl" aria-hidden>🖼️</span>
-            <p className="text-sm text-parchment font-medium">
-              Drop image here or <span className="text-gold">browse</span>
-            </p>
-            <p className="text-xs text-muted">PNG, JPG, GIF, SVG · max {MAX_FILE_SIZE_MB} MB</p>
+          <div className="text-center text-muted p-4">
+            <span className="text-3xl block mb-2 opacity-50" aria-hidden>🖼️</span>
+            <span className="text-sm font-semibold">Click to upload</span>
+            <span className="block text-xs mt-1">JPEG, PNG, WEBP (max {MAX_FILE_SIZE_MB}MB)</span>
           </div>
         )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) onChange(file);
-          }}
-        />
       </div>
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        onChange={onChange}
+        className="hidden"
+        disabled={disabled}
+      />
       <FieldError msg={error} />
     </div>
   );
 }
 
-/** Progress stepper shown during the multi-step mint flow */
 function MintProgress({ stage, txHash, tokenId }) {
-  const steps = [
-    { key: "uploading-image", label: "Upload Image" },
-    { key: "creating-meta",   label: "Create Metadata" },
-    { key: "confirm-tx",      label: "Sign Transaction" },
-    { key: "pending-tx",      label: "Confirm On-Chain" },
-    { key: "success",         label: "Minted!" },
-  ];
-
-  const idx = steps.findIndex((s) => s.key === stage);
+  if (stage === "idle" || stage === "error") return null;
+  const isSuccess = stage === "success";
 
   return (
-    <div className="rounded-xl border border-ash bg-charcoal p-5 flex flex-col gap-4">
-      {/* Step indicators */}
-      <ol className="flex items-center justify-between gap-1">
-        {steps.map((step, i) => {
-          const done    = i < idx || stage === "success";
-          const active  = i === idx && stage !== "success";
-          return (
-            <li key={step.key} className="flex-1 flex flex-col items-center gap-1">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors
-                ${done   ? "bg-gold border-gold text-obsidian"
-                : active ? "border-gold text-gold animate-pulse"
-                :          "border-ash text-muted"}`}>
-                {done ? "✓" : i + 1}
-              </div>
-              <span className={`text-[10px] text-center leading-tight hidden sm:block
-                ${done ? "text-gold" : active ? "text-parchment" : "text-muted"}`}>
-                {step.label}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-
-      {/* Status message */}
-      {STAGE_LABELS[stage] && (
-        <p className="text-sm text-center text-parchment flex items-center justify-center gap-2">
-          {isBusy(stage) && (
-            <span className="inline-block w-3 h-3 rounded-full border-2 border-gold border-t-transparent animate-spin" aria-hidden />
-          )}
-          {STAGE_LABELS[stage]}
-        </p>
-      )}
-
-      {/* Pending tx link */}
-      {txHash && stage === "pending-tx" && (
-        <a
-          href={`https://mumbai.polygonscan.com/tx/${txHash}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-gold font-mono text-center hover:underline break-all"
-        >
-          {txHash.slice(0, 18)}&hellip;{txHash.slice(-8)} ↗
-        </a>
-      )}
-
-      {/* Success card */}
-      {stage === "success" && tokenId !== null && (
-        <div className="text-center">
-          <p className="text-gold font-display text-2xl font-bold">
-            Token #{tokenId.toString()}
-          </p>
-          <p className="text-parchment text-xs mt-1">Card minted to your wallet!</p>
+    <div className={`p-4 rounded-xl border ${isSuccess ? "bg-gold/10 border-gold/40 text-gold" : "bg-obsidian border-ash text-parchment"}`}>
+      <div className="flex items-center gap-3">
+        {isSuccess ? (
+          <span className="text-2xl" aria-hidden>🎉</span>
+        ) : (
+          <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden />
+        )}
+        <div>
+          <p className="font-semibold text-sm">{STAGE_LABELS[stage] ?? "Processing…"}</p>
           {txHash && (
-            <a
-              href={`https://mumbai.polygonscan.com/tx/${txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block mt-2 text-xs text-muted hover:text-gold transition-colors"
-            >
-              View on Polygonscan ↗
-            </a>
+            <p className="text-xs opacity-80 mt-0.5">
+              Tx: <span className="font-mono">{txHash.slice(0,10)}…{txHash.slice(-8)}</span>
+            </p>
+          )}
+          {isSuccess && tokenId !== null && (
+            <p className="text-xs font-bold mt-1">Token ID: #{tokenId.toString()}</p>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -277,113 +198,177 @@ function MintProgress({ stage, txHash, tokenId }) {
 
 export default function MintCardForm({ onMintSuccess }) {
   const { isConnected } = useAccount();
+  const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
+  const publicClient = usePublicClient();
 
+  const {
+    mintCard,
+    stage: wagmiStage,
+    txHash,
+    tokenId,
+    error: wagmiError,
+    reset: resetWagmi,
+  } = useMintCard();
 
-  // Form state
-  const [image,        setImage]        = useState(null);
-  const [preview,      setPreview]      = useState(null);
-  const [name,         setName]         = useState("");
-  const [description,  setDescription]  = useState("");
-  const [rarity,       setRarity]       = useState("Common");
-  const [fieldErrors,  setFieldErrors]  = useState({});
+  const [image,       setImage]       = useState(null);
+  const [preview,     setPreview]     = useState("");
+  const [name,        setName]        = useState("");
+  const [description, setDescription] = useState("");
+  const [rarity,      setRarity]      = useState("");
+  
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [mintStage,   setMintStage]   = useState("idle");
+  const [stageError,  setStageError]  = useState("");
+  const [imageCID,    setImageCID]    = useState("");
+  const [metaCID,     setMetaCID]     = useState("");
 
-  // IPFS intermediate values
-  const [imageCID,     setImageCID]     = useState(null);
-  const [metaCID,      setMetaCID]      = useState(null);
+  const [imageHashStr, setImageHashStr] = useState("");
+  const [metaHashStr,  setMetaHashStr]  = useState("");
 
-  // Multi-step stage (separate from wagmi's internal stage)
-  const [mintStage,    setMintStage]    = useState("idle");
-  const [stageError,   setStageError]  = useState(null);
+  const [copyrightViolation, setCopyrightViolation] = useState(null);
 
-  const { mintCard, stage: wagmiStage, txHash, tokenId, error: wagmiError, reset: resetWagmi } = useMintCard();
-
-  useEffect(() => {
-    if (wagmiStage === "success") {
-      queryClient.invalidateQueries();
-      onMintSuccess?.();
-    }
-  }, [wagmiStage, queryClient, onMintSuccess]);
-
-  // Merged stage: our local IPFS stages take priority, then wagmi's stage
-  const effectiveStage = ["uploading-image","creating-meta","error"].includes(mintStage)
+  const effectiveStage = (wagmiStage === "idle" || wagmiStage === "error") && mintStage !== "idle"
     ? mintStage
     : wagmiStage;
 
+  const error = (mintStage === "error" ? stageError : null) ?? wagmiError;
   const busy  = isBusy(effectiveStage);
-  const error = stageError ?? wagmiError;
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
-
-  const handleImageChange = useCallback((file) => {
-    setImage(file);
-    setFieldErrors((e) => ({ ...e, image: undefined }));
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-  }, []);
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImage(file);
+      setPreview(URL.createObjectURL(file));
+      setFieldErrors((prev) => ({ ...prev, image: undefined }));
+    }
+  };
 
   const handleReset = useCallback(() => {
     setImage(null);
-    setPreview(null);
+    setPreview("");
     setName("");
     setDescription("");
-    setRarity("Common");
+    setRarity("");
     setFieldErrors({});
-    setImageCID(null);
-    setMetaCID(null);
     setMintStage("idle");
-    setStageError(null);
+    setStageError("");
+    setImageCID("");
+    setMetaCID("");
+    setImageHashStr("");
+    setMetaHashStr("");
+    setCopyrightViolation(null);
     resetWagmi();
   }, [resetWagmi]);
 
+  // Finalize copyright and invalidate ALL caches on success for instant zero-refresh
+  useEffect(() => {
+    if (wagmiStage === "success" && tokenId !== null && user) {
+      finalizeCopyright({
+        image_hash: imageHashStr || null,
+        metadata_hash: metaHashStr || null,
+        token_id: Number(tokenId),
+        owner_wallet: user.wallet_address
+      })
+      .then(() => {
+        // Invalidate ALL queries across Wagmi and custom caches for instant auto-update
+        queryClient.invalidateQueries();
+      })
+      .catch(err => console.error("Finalization failed:", err));
+    } else if (wagmiStage === "success" && tokenId !== null) {
+      // Invalidate queries even if user object hasn't finished loading
+      queryClient.invalidateQueries();
+    }
+  }, [wagmiStage, tokenId, user, imageHashStr, metaHashStr, queryClient]);
+
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
+    if (busy) return;
 
-    const errors = validate({ image, name, description, rarity });
-    if (Object.keys(errors).length) {
-      setFieldErrors(errors);
+    setStageError("");
+    setMintStage("idle");
+    setCopyrightViolation(null);
+
+    const validationErrors = validate({ image, name, description, rarity });
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
       return;
     }
-    setFieldErrors({});
-    setStageError(null);
 
     try {
-      // ── Step 1: upload image ──────────────────────────────────────────────
+      // Step 1: image upload
       setMintStage("uploading-image");
-      const cid = await apiUploadAsset(image);
-      setImageCID(cid);
+      const { cid: assetCid, image_hash } = await apiUploadAsset(image);
+      setImageCID(assetCid);
+      setImageHashStr(image_hash);
 
-      // ── Step 2: create metadata ───────────────────────────────────────────
+      // Step 2: metadata creation
       setMintStage("creating-meta");
-      const metadataURI = await apiCreateMetadata({
+      const { cid: metadataURI, metadata_hash } = await apiCreateMetadata({
         name:        name.trim(),
         description: description.trim(),
-        imageCID:    cid,
+        imageCID:    assetCid,
         rarity,
-        attributes:  [], // extras can be wired up later
+        attributes:  [], 
       });
       setMetaCID(metadataURI);
+      setMetaHashStr(metadata_hash);
 
-      // ── Step 3 + 4: on-chain mint (wagmi handles confirm-tx / pending-tx) ─
-      setMintStage("idle"); // hand off stage tracking to wagmi hook
-      await mintCard(metadataURI);
+      // Step 3: Check on-chain registration BEFORE opening MetaMask
+      const rawHex = metadata_hash.startsWith('0x') ? metadata_hash.slice(2) : metadata_hash;
+      const bytes32Hash = `0x${rawHex.padEnd(64, '0').slice(0, 64)}`;
 
-      // onMintSuccess callback (e.g. refresh card list in parent)
+      if (publicClient) {
+        try {
+          const isRegistered = await publicClient.readContract({
+            address: CONTRACT_ADDRESS,
+            abi: ABI,
+            functionName: 'registeredHashes',
+            args: [bytes32Hash]
+          });
+          if (isRegistered) {
+            throw new Error("COPYRIGHT_VIOLATION: This card metadata/content is already patented and registered on the blockchain!");
+          }
+        } catch (readErr) {
+          if (readErr.message && readErr.message.includes("COPYRIGHT_VIOLATION")) {
+            throw readErr;
+          }
+          // Ignore general read errors (e.g. node connectivity during test setup)
+        }
+      }
+
+      // Step 4: On-chain mint via Wagmi writeContract
+      setMintStage("idle"); 
+      await mintCard(metadataURI, bytes32Hash);
+
       onMintSuccess?.({ name, rarity, metadataURI });
 
     } catch (err) {
-      setStageError(err.message ?? "An error occurred.");
+      if (err.message && err.message.startsWith("COPYRIGHT_VIOLATION:")) {
+         setCopyrightViolation(err.message.replace("COPYRIGHT_VIOLATION:", ""));
+      } else {
+         setStageError(err.message ?? "An error occurred.");
+      }
       setMintStage("error");
     }
-  }, [image, name, description, rarity, mintCard, onMintSuccess]);
+  }, [image, name, description, rarity, mintCard, onMintSuccess, busy, publicClient]);
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   if (!isConnected) {
     return (
       <div className="card-tile p-6 text-center flex flex-col items-center gap-3">
         <span className="text-4xl" aria-hidden>🔒</span>
         <p className="text-parchment font-semibold">Connect your wallet to mint cards.</p>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return (
+      <div className="card-tile p-6 text-center flex flex-col items-center gap-3">
+        <span className="text-4xl" aria-hidden>👤</span>
+        <p className="text-parchment font-semibold">Please Login or Register to mint game cards.</p>
       </div>
     );
   }
@@ -403,16 +388,15 @@ export default function MintCardForm({ onMintSuccess }) {
   const showProgress = effectiveStage !== "idle" || wagmiStage !== "idle";
 
   return (
-    <section className="card-tile p-6 flex flex-col gap-6 w-full max-w-lg mx-auto">
+    <section className="card-tile p-6 flex flex-col gap-6 w-full max-w-lg mx-auto relative">
       {/* Header */}
       <div>
         <h2 className="font-display text-2xl font-bold text-ivory uppercase tracking-widest">
           Mint a Card
         </h2>
         <p className="text-muted text-xs mt-1">
-          Upload artwork, fill in details, and mint your card as an NFT on Polygon Mumbai.
+          Upload artwork, fill in details, and mint your card as an NFT protected by copyright hashing.
         </p>
-        {/* Contract address hint */}
         <p className="text-muted text-[10px] font-mono mt-1 break-all">
           Contract: {CONTRACT_ADDRESS.slice(0,10)}&hellip;{CONTRACT_ADDRESS.slice(-6)}
         </p>
@@ -427,21 +411,37 @@ export default function MintCardForm({ onMintSuccess }) {
         />
       )}
 
-      {/* Error state */}
-      {(effectiveStage === "error" || wagmiStage === "error") && error && (
+      {/* Standard Error state */}
+      {!copyrightViolation && (effectiveStage === "error" || wagmiStage === "error") && error && (
         <div role="alert" className="rounded-lg border border-crimson/40 bg-crimson/10 px-4 py-3">
           <p className="text-crimson-light text-sm font-semibold">Minting failed</p>
           <p className="text-muted text-xs mt-1 break-all">{error}</p>
         </div>
       )}
 
+      {/* 🔴 COPYRIGHT VIOLATION ALERT 🔴 */}
+      {copyrightViolation && (
+        <div role="alert" className="rounded-xl border-2 border-crimson shadow-[0_0_20px_rgba(220,38,38,0.5)] bg-obsidian px-6 py-5 animate-pulse">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-3xl">🚫</span>
+            <h3 className="text-crimson-light text-lg font-bold font-display uppercase tracking-wider">Copyright Violation</h3>
+          </div>
+          <p className="text-ivory text-sm leading-relaxed mb-4">
+            {copyrightViolation}
+          </p>
+          <button onClick={handleReset} className="w-full py-2 bg-crimson/20 hover:bg-crimson/40 border border-crimson text-crimson-light font-bold rounded transition-colors text-sm uppercase tracking-wider">
+            Acknowledge & Reset
+          </button>
+        </div>
+      )}
+
       {/* Success: show Mint Another button */}
       {wagmiStage === "success" ? (
-        <button onClick={handleReset} className="btn-primary w-full">
+        <button onClick={handleReset} className="btn-primary w-full mt-4">
           Mint Another Card
         </button>
       ) : (
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+        <form onSubmit={handleSubmit} noValidate className={`flex flex-col gap-5 ${copyrightViolation ? 'hidden' : ''}`}>
           {/* Image picker */}
           <ImagePicker
             onChange={handleImageChange}
@@ -504,7 +504,7 @@ export default function MintCardForm({ onMintSuccess }) {
                     disabled={busy}
                   />
                   <span className="text-base mb-0.5" aria-hidden>
-                    {r === "Legendary" ? "⭐" : r === "Epic" ? "🔴" : r === "Rare" ? "🟠" : r === "Uncommon" ? "🟤" : "⚪"}
+                    {r === "Legendary" ? "⭐" : r === "Epic" ? "🔴" : r === "Rare" ? "🟡" : r === "Uncommon" ? "🟢" : "⚪"}
                   </span>
                   {r}
                 </label>
@@ -517,12 +517,12 @@ export default function MintCardForm({ onMintSuccess }) {
           <button
             type="submit"
             disabled={busy}
-            className="btn-primary w-full text-base py-3 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="btn-primary w-full text-base py-3 mt-2 disabled:opacity-60 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(245,158,11,0.2)]"
           >
             {busy ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="inline-block w-4 h-4 rounded-full border-2 border-obsidian border-t-transparent animate-spin" aria-hidden />
-                {STAGE_LABELS[effectiveStage === "idle" ? wagmiStage : effectiveStage] ?? "Processing\u2026"}
+                {STAGE_LABELS[effectiveStage === "idle" ? wagmiStage : effectiveStage] ?? "Processing…"}
               </span>
             ) : "Mint Card"}
           </button>

@@ -1,0 +1,11 @@
+{
+  "name": "black",
+  "description": "car",
+  "image": "ipfs://QmMockImageHash_1788109308916.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Legendary"
+    }
+  ]
+}

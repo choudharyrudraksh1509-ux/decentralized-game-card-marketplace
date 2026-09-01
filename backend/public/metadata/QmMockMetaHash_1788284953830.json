@@ -1,0 +1,11 @@
+{
+  "name": "mustang",
+  "description": "ghoda",
+  "image": "ipfs://QmMockImageHash_1788284953816.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Epic"
+    }
+  ]
+}

@@ -3,7 +3,7 @@
  * Wagmi v2 hooks pre-configured for the GameCardMarketplace contract.
  * The contract address is read from VITE_CONTRACT_ADDRESS in .env.
  */
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt, useChainId, useSwitchChain } from "wagmi";
 import { decodeEventLog } from "viem";
 import { useState, useEffect } from "react";
 import ABI from "../abi/GameCardMarketplace.json";
@@ -39,12 +39,12 @@ export function parseMintedEvent(receipt) {
 /**
  * Hook that wraps mintCard() with status tracking.
  * Returns { mintCard, stage, txHash, tokenId, error, reset }
- *
- * Stage progression:
- *   idle → confirm-tx → pending-tx → success | error
  */
 export function useMintCard() {
   const { writeContractAsync, isPending: isWalletPending } = useWriteContract();
+  const chainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
+
   const [stage,   setStage]   = useState("idle");
   const [txHash,  setTxHash]  = useState(null);
   const [tokenId, setTokenId] = useState(null);
@@ -68,31 +68,47 @@ export function useMintCard() {
     }
   }, [receipt]);
 
-  const mintCard = async (metadataURI) => {
+  const mintCard = async (metadataURI, contentHash) => {
     if (!isContractConfigured()) {
       setError("VITE_CONTRACT_ADDRESS is not set. Add it to frontend/.env");
       setStage("error");
-      return;
+      throw new Error("VITE_CONTRACT_ADDRESS is not set.");
     }
 
     setError(null);
     setTokenId(null);
     setTxHash(null);
 
+    // Auto network switch to Hardhat Localhost if connected to Sepolia or another network
+    if (chainId !== 31337 && switchChainAsync) {
+      try {
+        await switchChainAsync({ chainId: 31337 });
+      } catch (switchErr) {
+        const msg = "Please switch your MetaMask network to Hardhat Localhost (Chain ID 31337).";
+        setError(msg);
+        setStage("error");
+        throw new Error(msg);
+      }
+    }
+
     try {
       setStage("confirm-tx");
       const hash = await writeContractAsync({
         address:      CONTRACT_ADDRESS,
         abi:          ABI,
-        functionName: "mintCard",
-        args:         [metadataURI],
+        functionName: "mintCardWithHash",
+        args:         [metadataURI, contentHash],
+        chainId:      31337,
+        gas:          500000n,
       });
       setTxHash(hash);
       setStage("pending-tx");
+      return hash;
     } catch (err) {
-      const msg = err?.shortMessage ?? err?.message ?? "Transaction rejected.";
+      const msg = err?.shortMessage ?? err?.message ?? "Transaction rejected or failed.";
       setError(msg);
       setStage("error");
+      throw err; // Re-throw error so callers abort and do NOT pretend mint succeeded!
     }
   };
 

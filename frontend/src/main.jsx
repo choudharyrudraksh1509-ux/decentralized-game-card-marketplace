@@ -2,24 +2,25 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import { WagmiProvider } from "wagmi";
-import { mainnet, sepolia, polygonMumbai, hardhat } from "wagmi/chains";
+import { hardhat, sepolia, mainnet, polygonMumbai } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 
+import { AuthProvider } from "./context/AuthContext";
 import App from "./App.jsx";
 import "./index.css";
 
-// ── Wagmi + RainbowKit config ─────────────────────────────
+// ── Wagmi + RainbowKit config (hardhat first for local node deployment) ──
 const config = getDefaultConfig({
   appName: "Card Nexus",
   projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? "YOUR_PROJECT_ID",
-  chains: [mainnet, sepolia, polygonMumbai, hardhat],
+  chains: [hardhat, sepolia, mainnet, polygonMumbai],
 });
 
 const queryClient = new QueryClient();
 
-// ── Custom RainbowKit theme (warm — no blues/greens/purples) ─
+// ── Custom RainbowKit theme ──
 const cardNexusTheme = darkTheme({
   accentColor: "#d4a017",
   accentColorForeground: "#0d0d0d",
@@ -33,7 +34,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={cardNexusTheme}>
-          <App />
+          <AuthProvider>
+            <App />
+          </AuthProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

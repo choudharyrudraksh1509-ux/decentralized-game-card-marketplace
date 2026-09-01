@@ -1,0 +1,11 @@
+{
+  "name": "A",
+  "description": "F",
+  "image": "ipfs://QmMockImageHash_1788285830847.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Uncommon"
+    }
+  ]
+}

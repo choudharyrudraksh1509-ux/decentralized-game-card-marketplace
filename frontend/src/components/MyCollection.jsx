@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { parseEther, formatEther } from "viem";
 import ABI from "../abi/GameCardMarketplace.json";
 import { CONTRACT_ADDRESS, isContractConfigured } from "../hooks/useMarketplace";
+import { releaseCopyright } from "../api/auth";
 import Card from "./Card";
 
 /** Converts ipfs:// URLs to an HTTP gateway or local mock server */
@@ -141,7 +142,8 @@ export default function MyCollection() {
           address: CONTRACT_ADDRESS,
           abi: ABI,
           functionName: "setApprovalForAll",
-          args: [CONTRACT_ADDRESS, true]
+          args: [CONTRACT_ADDRESS, true],
+          chainId: 31337,
         });
         await publicClient.waitForTransactionReceipt({ hash });
         await refetchApproval();
@@ -155,7 +157,9 @@ export default function MyCollection() {
         address: CONTRACT_ADDRESS,
         abi: ABI,
         functionName: "listCard",
-        args: [tokenId, priceWei]
+        args: [BigInt(tokenId), priceWei],
+        chainId: 31337,
+        gas: 300000n,
       });
       
       await publicClient.waitForTransactionReceipt({ hash: listHash });
@@ -181,11 +185,20 @@ export default function MyCollection() {
         address: CONTRACT_ADDRESS,
         abi: ABI,
         functionName: "burnCard",
-        args: [tokenId]
+        args: [BigInt(tokenId)],
+        chainId: 31337,
+        gas: 300000n,
       });
       
       await publicClient.waitForTransactionReceipt({ hash: burnHash });
       
+      // Release copyright in backend database
+      try {
+        await releaseCopyright(tokenId);
+      } catch (e) {
+        console.error("Failed to release copyright in backend DB:", e);
+      }
+
       setOperatingId(null);
       setOperationState("");
       queryClient.invalidateQueries(); 

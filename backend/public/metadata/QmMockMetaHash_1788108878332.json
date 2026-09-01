@@ -1,0 +1,11 @@
+{
+  "name": "iron",
+  "description": "legend",
+  "image": "ipfs://QmMockImageHash_1788108878324.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Legendary"
+    }
+  ]
+}

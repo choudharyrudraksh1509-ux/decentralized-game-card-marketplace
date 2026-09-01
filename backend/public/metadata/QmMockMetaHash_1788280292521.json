@@ -1,0 +1,11 @@
+{
+  "name": "kala ghoda",
+  "description": "ford",
+  "image": "ipfs://QmMockImageHash_1788280292434.jpg",
+  "attributes": [
+    {
+      "trait_type": "Rarity",
+      "value": "Common"
+    }
+  ]
+}

@@ -139,8 +139,10 @@ export default function MarketplaceGallery() {
         address: CONTRACT_ADDRESS,
         abi: ABI,
         functionName: "buyCard",
-        args: [id],
-        value: price
+        args: [BigInt(id)],
+        value: price,
+        chainId: 31337,
+        gas: 300000n,
       });
       setTxHash(hash);
     } catch (err) {
