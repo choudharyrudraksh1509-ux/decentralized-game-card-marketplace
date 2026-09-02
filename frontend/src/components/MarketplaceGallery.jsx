@@ -42,7 +42,9 @@ export default function MarketplaceGallery() {
 
   // Stable memoized array of token IDs [1, 2, ..., nextTokenId - 1]
   const tokenIds = useMemo(() => {
-    return Array.from({ length: Math.max(0, nextTokenId - 1) }, (_, i) => BigInt(i + 1));
+    // Bound the maximum tokens to prevent memory allocation freezes if nextTokenId is erroneously huge
+    const maxTokens = Math.min(Math.max(0, nextTokenId - 1), 1000);
+    return Array.from({ length: maxTokens }, (_, i) => BigInt(i + 1));
   }, [nextTokenId]);
 
   // Memoized contracts parameters to prevent infinite multicall loops
@@ -93,7 +95,11 @@ export default function MarketplaceGallery() {
       const promises = activeListings.map(async (item) => {
         try {
           const httpUrl = resolveIpfs(item.uri);
-          const res = await fetch(httpUrl);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          const res = await fetch(httpUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (!res.ok) throw new Error("Metadata fetch failed");
           const metadata = await res.json();
           return { uri: item.uri, metadata };
         } catch (err) {

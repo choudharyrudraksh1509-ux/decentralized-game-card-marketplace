@@ -45,18 +45,23 @@ export default function TransactionHistory() {
       try {
         const fetchEvents = async () => {
           const blockNumber = await staticClient.getBlockNumber();
+          if (!blockNumber || blockNumber === 0n) return [];
           const fromBlock = blockNumber > 500n ? blockNumber - 500n : 0n;
           
           return await staticClient.getContractEvents({
             address: CONTRACT_ADDRESS,
             abi: ABI,
             fromBlock: fromBlock,
+            toBlock: blockNumber,
           });
         };
 
         const events = await withTimeout(fetchEvents(), 2500);
         
-        return events.sort((a, b) => {
+        // Cap events to 200 to prevent sorting and rendering freezes if there's a flood of events
+        const cappedEvents = Array.isArray(events) ? events.slice(-200) : [];
+        
+        return cappedEvents.sort((a, b) => {
           if (b.blockNumber !== a.blockNumber) {
             return Number(b.blockNumber - a.blockNumber);
           }

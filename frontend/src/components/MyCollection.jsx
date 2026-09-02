@@ -47,7 +47,9 @@ export default function MyCollection() {
   const balance = Number(balanceData || 0n);
 
   const indices = useMemo(() => {
-    return Array.from({ length: balance }, (_, i) => BigInt(i));
+    // Bound the maximum balance to prevent memory allocation freezes if balance is erroneously huge
+    const maxBalance = Math.min(Math.max(0, balance), 1000);
+    return Array.from({ length: maxBalance }, (_, i) => BigInt(i));
   }, [balance]);
 
   const indexContracts = useMemo(() => {
@@ -117,7 +119,11 @@ export default function MyCollection() {
       const promises = tokens.map(async (item) => {
         try {
           const httpUrl = resolveIpfs(item.uri);
-          const res = await fetch(httpUrl);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          const res = await fetch(httpUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (!res.ok) throw new Error("Metadata fetch failed");
           const metadata = await res.json();
           return { uri: item.uri, metadata };
         } catch (err) {
