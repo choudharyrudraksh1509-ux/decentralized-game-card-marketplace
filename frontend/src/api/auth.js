@@ -1,4 +1,5 @@
-const API_BASE = 'http://localhost:5000/api';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:5000';
+const API_BASE = `${BACKEND_URL}/api`;
 
 export const finalizeCopyright = async (payload) => {
   // payload: { image_hash, metadata_hash, token_id, owner_wallet }
@@ -26,7 +27,7 @@ export const releaseCopyright = async (tokenId) => {
 export const uploadAvatar = async (file) => {
   const form = new FormData();
   form.append("image", file);
-  const res = await fetch(`http://localhost:5000/upload-avatar`, {
+  const res = await fetch(`${BACKEND_URL}/upload-avatar`, {
     method: "POST",
     body: form,
   });
