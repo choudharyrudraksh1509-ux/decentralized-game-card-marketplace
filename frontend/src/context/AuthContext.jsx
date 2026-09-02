@@ -5,7 +5,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:5000';
 const API_BASE = `${BACKEND_URL}/api/auth`;
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(localStorage.getItem('token') || null);
+  const [token, setToken] = useState(sessionStorage.getItem('token') || null);
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -43,7 +43,7 @@ export function AuthProvider({ children }) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Login failed');
-    localStorage.setItem('token', data.token);
+    sessionStorage.setItem('token', data.token);
     setToken(data.token);
     setUser(data.user);
   };
@@ -56,13 +56,13 @@ export function AuthProvider({ children }) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Registration failed');
-    localStorage.setItem('token', data.token);
+    sessionStorage.setItem('token', data.token);
     setToken(data.token);
     setUser(data.user);
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     setToken(null);
     setUser(null);
   };

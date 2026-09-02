@@ -50,8 +50,8 @@ export function useNetworkGuard(targetChainId = TARGET_CHAIN_ID) {
   const [switching, setSwitching] = useState(false);
   const [localError, setLocalError] = useState(null);
 
-  // Accept current chain if it is any of our supported chains (Sepolia, Hardhat, etc.)
-  const isCorrectNetwork = ALLOWED_CHAIN_IDS.includes(currentChainId);
+  // Accept current chain only if it strictly matches our single intended target deployment chain
+  const isCorrectNetwork = currentChainId === targetChainId;
   const activeParams = NETWORKS[currentChainId] || NETWORKS[targetChainId] || NETWORKS[11155111];
 
   const switchToTarget = useCallback(async () => {
