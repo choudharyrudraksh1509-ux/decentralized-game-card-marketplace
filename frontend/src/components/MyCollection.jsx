@@ -1,88 +1,118 @@
-import { useState } from "react";
-import { useAccount, useReadContract, useReadContracts, useWriteContract, usePublicClient } from "wagmi";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { parseEther, formatEther } from "viem";
-import ABI from "../abi/GameCardMarketplace.json";
-import { CONTRACT_ADDRESS, isContractConfigured } from "../hooks/useMarketplace";
-import { releaseCopyright } from "../api/auth";
-import Card from "./Card";
+import React, { useState, useEffect, useMemo } from 'react';
+import { useAccount, useReadContract, useReadContracts, useWriteContract, usePublicClient } from 'wagmi';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { formatEther, parseEther } from 'viem';
+import Card from './Card';
+import ABI from '../abi/GameCardMarketplace.json';
+import { CONTRACT_ADDRESS, isContractConfigured } from '../hooks/useMarketplace';
+import { releaseCopyright } from '../api/auth';
 
-/** Converts ipfs:// URLs to an HTTP gateway or local mock server */
-function resolveIpfs(url) {
-  if (!url) return "";
-  if (url.startsWith("ipfs://")) {
-    const pathPart = url.replace("ipfs://", "");
-    if (pathPart.includes("MockImageHash")) {
-      return `http://localhost:5000/images/${pathPart}`;
+/** Resolve IPFS URIs (ipfs://... -> http gateway or mock endpoint) */
+function resolveIpfs(uri) {
+  if (!uri) return 'https://via.placeholder.com/400x550/1A1F2C/D4A017?text=Card+Image';
+  if (uri.startsWith('ipfs://')) {
+    const cidStr = uri.replace('ipfs://', '');
+    if (cidStr.startsWith('QmMockImageHash_') || cidStr.startsWith('QmMockMetaHash_')) {
+      const isMeta = cidStr.startsWith('QmMockMetaHash_');
+      const folder = isMeta ? 'metadata' : 'images';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:5000';
+      return `${backendUrl}/${folder}/${cidStr}`;
     }
-    if (pathPart.includes("MockMetaHash")) {
-      return `http://localhost:5000/metadata/${pathPart}`;
-    }
-    return url.replace("ipfs://", "https://ipfs.io/ipfs/");
+    return `https://ipfs.io/ipfs/${cidStr}`;
   }
-  return url;
+  return uri;
 }
 
 export default function MyCollection() {
-  const { address, isConnected } = useAccount();
+  const { address } = useAccount();
   const publicClient = usePublicClient();
   const queryClient = useQueryClient();
 
   const [operatingId, setOperatingId] = useState(null);
-  const [operationState, setOperationState] = useState(""); // 'approving', 'listing', 'canceling'
+  const [operationState, setOperationState] = useState(""); // 'approving', 'listing', 'canceling', 'burning'
 
-  // 1. Fetch balance
+  // 1. Fetch balance (staleTime 60s)
   const { data: balanceData, isLoading: isBalanceLoading } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: ABI,
     functionName: "balanceOf",
     args: [address],
-    query: { enabled: !!address && isContractConfigured() }
+    query: { 
+      enabled: !!address && isContractConfigured(),
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
   });
 
   const balance = Number(balanceData || 0n);
-  const indices = Array.from({ length: balance }, (_, i) => BigInt(i));
 
-  // 2. Fetch token IDs for each index
-  const { data: tokenIdsData, isLoading: isTokenIdsLoading } = useReadContracts({
-    contracts: indices.map(i => ({
+  const indices = useMemo(() => {
+    return Array.from({ length: balance }, (_, i) => BigInt(i));
+  }, [balance]);
+
+  const indexContracts = useMemo(() => {
+    return indices.map(i => ({
       address: CONTRACT_ADDRESS,
       abi: ABI,
       functionName: "tokenOfOwnerByIndex",
       args: [address, i]
-    })),
-    query: { enabled: balance > 0 }
+    }));
+  }, [indices, address]);
+
+  // 2. Fetch token IDs for each index
+  const { data: tokenIdsData, isLoading: isTokenIdsLoading } = useReadContracts({
+    contracts: indexContracts,
+    query: { 
+      enabled: balance > 0,
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
   });
 
-  const tokenIds = tokenIdsData?.map(d => d.result).filter(res => res !== undefined) || [];
+  const tokenIds = useMemo(() => {
+    return tokenIdsData?.map(d => d.result).filter(res => res !== undefined) || [];
+  }, [tokenIdsData]);
 
-  // 3. Fetch token URIs AND listing states
-  const { data: multicallData, isLoading: isMulticallLoading, refetch: refetchMulticall } = useReadContracts({
-    contracts: tokenIds.flatMap(id => [
+  const multicallContracts = useMemo(() => {
+    return tokenIds.flatMap(id => [
       { address: CONTRACT_ADDRESS, abi: ABI, functionName: "tokenURI", args: [id] },
       { address: CONTRACT_ADDRESS, abi: ABI, functionName: "getListing", args: [id] }
-    ]),
-    query: { enabled: tokenIds.length > 0 }
+    ]);
+  }, [tokenIds]);
+
+  // 3. Fetch token URIs AND listing states
+  const { data: multicallData, isLoading: isMulticallLoading } = useReadContracts({
+    contracts: multicallContracts,
+    query: { 
+      enabled: tokenIds.length > 0,
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
   });
 
-  const tokens = [];
-  if (multicallData) {
-    for (let i = 0; i < tokenIds.length; i++) {
-      const uriResult = multicallData[i * 2]?.result;
-      const listingResult = multicallData[i * 2 + 1]?.result; // [seller, price, isListed]
-      if (uriResult) {
-        tokens.push({
-          id: tokenIds[i],
-          uri: uriResult,
-          listing: listingResult
-        });
+  const tokens = useMemo(() => {
+    const list = [];
+    if (multicallData) {
+      for (let i = 0; i < tokenIds.length; i++) {
+        const uriResult = multicallData[i * 2]?.result;
+        const listingResult = multicallData[i * 2 + 1]?.result;
+        if (uriResult) {
+          list.push({
+            id: tokenIds[i],
+            uri: uriResult,
+            listing: listingResult
+          });
+        }
       }
     }
-  }
+    return list;
+  }, [multicallData, tokenIds]);
 
-  // 4. Fetch JSON metadata from IPFS (Decoupled cache)
+  const tokenUrisKey = useMemo(() => tokens.map(t => t.uri).join("-"), [tokens]);
+
+  // 4. Fetch JSON metadata from IPFS
   const { data: metadataCache, isLoading: isMetadataLoading } = useQuery({
-    queryKey: ["my-collection-metadata-cache", tokens.map(t => t.uri).join("-")],
+    queryKey: ["my-collection-metadata-cache", tokenUrisKey],
     queryFn: async () => {
       const promises = tokens.map(async (item) => {
         try {
@@ -91,12 +121,11 @@ export default function MyCollection() {
           const metadata = await res.json();
           return { uri: item.uri, metadata };
         } catch (err) {
-          console.error("Failed to fetch metadata for", item.uri, err);
           return {
             uri: item.uri,
             metadata: {
               name: `Card #${item.id.toString()}`,
-              description: "A legendary on-chain game card minted during local testing.",
+              description: "A legendary on-chain game card.",
               image: "ipfs://QmMockImageHash_default",
               attributes: [{ trait_type: "Rarity", value: "Legendary" }]
             }
@@ -109,33 +138,36 @@ export default function MyCollection() {
         return acc;
       }, {});
     },
-    enabled: tokens.length > 0
+    enabled: tokens.length > 0,
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
   });
 
-  // Merge dynamic blockchain listing data with static IPFS metadata cache
-  const cards = tokens.map(item => ({
-    ...item,
-    metadata: metadataCache?.[item.uri] || null
-  }));
+  const cards = useMemo(() => {
+    return tokens.map(t => ({
+      ...t,
+      metadata: metadataCache?.[t.uri] || null
+    }));
+  }, [tokens, metadataCache]);
 
-  // 5. Approval, Listing, and Canceling Logic
-  const { data: isApproved, refetch: refetchApproval } = useReadContract({
+  // 5. Actions: List, Cancel, Burn
+  const { writeContractAsync } = useWriteContract();
+
+  const { refetch: refetchApproval } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: ABI,
     functionName: "isApprovedForAll",
     args: [address, CONTRACT_ADDRESS],
-    query: { enabled: !!address }
+    query: { enabled: !!address && isContractConfigured() }
   });
-
-  const { writeContractAsync } = useWriteContract();
 
   const handleList = async (tokenId, priceStr) => {
     try {
       setOperatingId(tokenId);
       
+      const { data: isApproved } = await refetchApproval();
       let currentlyApproved = isApproved;
-      
-      // Step 1: Approve marketplace if not already approved
+
       if (!currentlyApproved) {
         setOperationState("approving");
         const hash = await writeContractAsync({
@@ -146,10 +178,8 @@ export default function MyCollection() {
         });
         await publicClient.waitForTransactionReceipt({ hash });
         await refetchApproval();
-        currentlyApproved = true;
       }
 
-      // Step 2: List (or update) the card
       setOperationState("listing");
       const priceWei = parseEther(priceStr);
       const listHash = await writeContractAsync({
@@ -162,13 +192,37 @@ export default function MyCollection() {
       
       await publicClient.waitForTransactionReceipt({ hash: listHash });
       
-      // Success! Refresh local UI state and global query caches
       setOperatingId(null);
       setOperationState("");
       queryClient.invalidateQueries(); 
 
     } catch (error) {
       console.error("Listing/Update failed:", error);
+      setOperatingId(null);
+      setOperationState("");
+    }
+  };
+
+  const handleCancel = async (tokenId) => {
+    try {
+      setOperatingId(tokenId);
+      setOperationState("canceling");
+      
+      const cancelHash = await writeContractAsync({
+        address: CONTRACT_ADDRESS,
+        abi: ABI,
+        functionName: "cancelListing",
+        args: [BigInt(tokenId)],
+      });
+      
+      await publicClient.waitForTransactionReceipt({ hash: cancelHash });
+      
+      setOperatingId(null);
+      setOperationState("");
+      queryClient.invalidateQueries();
+
+    } catch (error) {
+      console.error("Cancellation failed:", error);
       setOperatingId(null);
       setOperationState("");
     }
@@ -189,7 +243,6 @@ export default function MyCollection() {
       
       await publicClient.waitForTransactionReceipt({ hash: burnHash });
       
-      // Release copyright in backend database
       try {
         await releaseCopyright(tokenId);
       } catch (e) {
@@ -207,59 +260,22 @@ export default function MyCollection() {
     }
   };
 
-  const handleCancel = async (tokenId) => {
-    try {
-      setOperatingId(tokenId);
-      setOperationState("canceling");
-      
-      const cancelHash = await writeContractAsync({
-        address: CONTRACT_ADDRESS,
-        abi: ABI,
-        functionName: "cancelListing",
-        args: [tokenId]
-      });
-      
-      await publicClient.waitForTransactionReceipt({ hash: cancelHash });
-      
-      // Success! Refresh local UI state and global query caches
-      setOperatingId(null);
-      setOperationState("");
-      queryClient.invalidateQueries(); 
+  const isInitialLoading = (isBalanceLoading || isTokenIdsLoading || isMulticallLoading || isMetadataLoading) && balance > 0 && cards.length === 0;
 
-    } catch (error) {
-      console.error("Cancel failed:", error);
-      setOperatingId(null);
-      setOperationState("");
-    }
-  };
-
-  const isLoading = isBalanceLoading || isTokenIdsLoading || isMulticallLoading || isMetadataLoading;
-
-  if (!isConnected) {
-    return (
-      <section id="my-cards" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="card-tile p-12 text-center flex flex-col items-center gap-3">
-          <span className="text-4xl" aria-hidden>🔒</span>
-          <p className="text-parchment font-semibold">Connect your wallet to view your collection.</p>
-        </div>
-      </section>
-    );
-  }
-
-  if (!isContractConfigured()) {
-    return null;
-  }
+  if (!isContractConfigured()) return null;
 
   return (
-    <section id="my-cards" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-      <div className="mb-8">
-        <h2 className="font-display text-3xl font-bold text-ivory uppercase tracking-widest">
-          My Collection
-        </h2>
-        <p className="text-muted text-sm mt-1">Cards currently in your wallet.</p>
+    <section id="my-cards" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 border-t border-gold/10">
+      <div className="flex items-end justify-between mb-8">
+        <div>
+          <h2 className="font-display text-3xl font-bold text-ivory uppercase tracking-widest">
+            My Collection
+          </h2>
+          <p className="text-muted text-sm mt-1">Cards currently in your wallet.</p>
+        </div>
       </div>
 
-      {isLoading ? (
+      {isInitialLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="card-tile h-[360px] animate-pulse flex flex-col p-4">
@@ -276,11 +292,10 @@ export default function MyCollection() {
             const rarity = card.metadata?.attributes?.find(a => a.trait_type === "Rarity")?.value || "Common";
             const imageUrl = resolveIpfs(card.metadata?.image);
             
-            const isListed = card.listing && card.listing[2]; // listing[2] is boolean isListed
+            const isListed = card.listing && card.listing[2];
             const badgeText = isListed ? "Currently Listed" : "Owned by you";
             const priceStr = isListed ? formatEther(card.listing[1]) : undefined;
             
-            // Dynamic text based on current transaction states
             let listText = isListed ? "Update Price" : "List Card";
             let cancelText = "Cancel Listing";
 
@@ -295,26 +310,18 @@ export default function MyCollection() {
                 key={card.id.toString()}
                 id={card.id}
                 image={imageUrl}
-                name={card.metadata?.name}
+                name={card.metadata?.name || `Card #${card.id.toString()}`}
                 rarity={rarity}
                 description={card.metadata?.description}
                 badgeText={badgeText}
-                
-                // Existing listing config
                 price={priceStr}
                 isListed={isListed}
-                
-                // Listing & Updating config
                 onList={(price) => handleList(card.id, price)}
                 listDisabled={operatingId !== null}
                 listText={listText}
-                
-                // Canceling config
                 onCancel={isListed ? () => handleCancel(card.id) : undefined}
                 cancelDisabled={operatingId !== null}
                 cancelText={cancelText}
-
-                // Burning config
                 onBurn={() => handleBurn(card.id)}
                 burnDisabled={operatingId !== null}
                 burnText={
@@ -327,12 +334,17 @@ export default function MyCollection() {
           })}
         </div>
       ) : (
-        <div className="card-tile p-12 flex flex-col items-center justify-center text-center">
-          <span className="text-5xl mb-4 opacity-50" aria-hidden>🎴</span>
-          <h3 className="text-xl font-display font-bold text-ivory mb-2">Your collection is empty</h3>
-          <p className="text-muted max-w-md">
-            You don't own any cards yet. Head over to the marketplace to buy one, or mint your own!
+        <div className="card-tile p-12 text-center max-w-xl mx-auto my-8">
+          <div className="text-4xl mb-3" aria-hidden="true">🛡️</div>
+          <h3 className="font-display text-lg font-bold text-ivory uppercase tracking-wider mb-1">
+            Your Inventory is Empty
+          </h3>
+          <p className="text-muted text-sm max-w-md mx-auto mb-6">
+            You don't own any cards yet. Mint your first card or purchase one from the marketplace!
           </p>
+          <a href="#mint" className="btn-primary inline-block py-2.5 px-6 font-bold uppercase tracking-wider text-xs">
+            Mint a Card Now
+          </a>
         </div>
       )}
     </section>

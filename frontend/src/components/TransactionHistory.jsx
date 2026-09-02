@@ -52,10 +52,12 @@ export default function TransactionHistory() {
         });
       } catch (err) {
         console.error("Failed to query events:", err);
-        return []; // Return empty list on failure instead of crashing the UI
+        return [];
       }
     },
-    enabled: isContractConfigured()
+    enabled: isContractConfigured(),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   if (!isContractConfigured()) return null;

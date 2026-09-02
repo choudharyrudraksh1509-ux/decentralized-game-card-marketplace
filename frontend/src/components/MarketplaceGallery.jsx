@@ -1,84 +1,94 @@
-import { useState, useEffect } from "react";
-import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatEther } from "viem";
-import ABI from "../abi/GameCardMarketplace.json";
-import { CONTRACT_ADDRESS, isContractConfigured } from "../hooks/useMarketplace";
+import React, { useState, useEffect, useMemo } from 'react';
+import { useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { formatEther } from 'viem';
+import Card from './Card';
+import ABI from '../abi/GameCardMarketplace.json';
+import { CONTRACT_ADDRESS, isContractConfigured } from '../hooks/useMarketplace';
 
-import Card from "./Card";
-
-/** Converts ipfs:// URLs to an HTTP gateway or local mock server */
-function resolveIpfs(url) {
-  if (!url) return "";
-  if (url.startsWith("ipfs://")) {
-    const pathPart = url.replace("ipfs://", "");
-    if (pathPart.includes("MockImageHash")) {
-      return `http://localhost:5000/images/${pathPart}`;
+/** Resolve IPFS URIs (ipfs://... -> http gateway or mock endpoint) */
+function resolveIpfs(uri) {
+  if (!uri) return 'https://via.placeholder.com/400x550/1A1F2C/D4A017?text=Card+Image';
+  if (uri.startsWith('ipfs://')) {
+    const cidStr = uri.replace('ipfs://', '');
+    if (cidStr.startsWith('QmMockImageHash_') || cidStr.startsWith('QmMockMetaHash_')) {
+      const isMeta = cidStr.startsWith('QmMockMetaHash_');
+      const folder = isMeta ? 'metadata' : 'images';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:5000';
+      return `${backendUrl}/${folder}/${cidStr}`;
     }
-    if (pathPart.includes("MockMetaHash")) {
-      return `http://localhost:5000/metadata/${pathPart}`;
-    }
-    return url.replace("ipfs://", "https://ipfs.io/ipfs/");
+    return `https://ipfs.io/ipfs/${cidStr}`;
   }
-  return url;
+  return uri;
 }
 
-const RARITY_STYLES = {
-  Common:    "badge-ash",
-  Uncommon:  "badge-ash",
-  Rare:      "badge-amber",
-  Epic:      "badge-crimson",
-  Legendary: "badge-gold",
-};
-
 export default function MarketplaceGallery() {
-  const { address: userAddress } = useAccount();
   const queryClient = useQueryClient();
   const [buyingId, setBuyingId] = useState(null);
-  
-  // 1. Fetch nextTokenId to know how many tokens exist
+
+  // 1. Fetch total nextTokenId count (staleTime 1 minute to prevent polling lag)
   const { data: nextTokenIdRaw } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: ABI,
     functionName: "nextTokenId",
-    query: { enabled: isContractConfigured() }
+    query: { 
+      enabled: isContractConfigured(),
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
   });
 
   const nextTokenId = Number(nextTokenIdRaw ?? 1n);
-  // Generate array of token IDs [1, 2, ..., nextTokenId - 1]
-  const tokenIds = Array.from({ length: Math.max(0, nextTokenId - 1) }, (_, i) => BigInt(i + 1));
 
-  // 2. Fetch listings and URIs for all tokens in parallel using useReadContracts
-  const { data: multicallData, refetch: refetchMulticall, isLoading: isMulticallLoading } = useReadContracts({
-    contracts: tokenIds.flatMap(id => [
+  // Stable memoized array of token IDs [1, 2, ..., nextTokenId - 1]
+  const tokenIds = useMemo(() => {
+    return Array.from({ length: Math.max(0, nextTokenId - 1) }, (_, i) => BigInt(i + 1));
+  }, [nextTokenId]);
+
+  // Memoized contracts parameters to prevent infinite multicall loops
+  const multicallContracts = useMemo(() => {
+    return tokenIds.flatMap(id => [
       { address: CONTRACT_ADDRESS, abi: ABI, functionName: "getListing", args: [id] },
       { address: CONTRACT_ADDRESS, abi: ABI, functionName: "tokenURI", args: [id] }
-    ]),
-    query: { enabled: tokenIds.length > 0 }
+    ]);
+  }, [tokenIds]);
+
+  // 2. Fetch listings and URIs for all tokens in parallel using useReadContracts
+  const { data: multicallData, isLoading: isMulticallLoading } = useReadContracts({
+    contracts: multicallContracts,
+    query: { 
+      enabled: tokenIds.length > 0,
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+    }
   });
 
-  // Parse multicall results to find active listings
-  const activeListings = [];
-  if (multicallData) {
-    for (let i = 0; i < tokenIds.length; i++) {
-      const listingResult = multicallData[i * 2]?.result;
-      const uriResult = multicallData[i * 2 + 1]?.result;
-      
-      // listingResult is [seller, price, isListed]
-      if (listingResult && listingResult[2] === true) {
-        activeListings.push({
-          id: tokenIds[i],
-          seller: listingResult[0],
-          price: listingResult[1], // bigint in wei
-          uri: uriResult
-        });
+  // Memoized active listings filtering
+  const activeListings = useMemo(() => {
+    const listings = [];
+    if (multicallData) {
+      for (let i = 0; i < tokenIds.length; i++) {
+        const listingResult = multicallData[i * 2]?.result;
+        const uriResult = multicallData[i * 2 + 1]?.result;
+        
+        if (listingResult && listingResult[2] === true) {
+          listings.push({
+            id: tokenIds[i],
+            seller: listingResult[0],
+            price: listingResult[1],
+            uri: uriResult
+          });
+        }
       }
     }
-  }
+    return listings;
+  }, [multicallData, tokenIds]);
 
-  // 3. Fetch JSON metadata from IPFS for active listings (Decoupled cache)
+  const activeListingUrisKey = useMemo(() => activeListings.map(l => l.uri).join("-"), [activeListings]);
+
+  // 3. Fetch JSON metadata from IPFS for active listings (Cached)
   const { data: metadataCache, isLoading: isMetadataLoading } = useQuery({
-    queryKey: ["metadata-cache", activeListings.map(l => l.uri).join("-")],
+    queryKey: ["metadata-cache", activeListingUrisKey],
     queryFn: async () => {
       const promises = activeListings.map(async (item) => {
         try {
@@ -87,12 +97,11 @@ export default function MarketplaceGallery() {
           const metadata = await res.json();
           return { uri: item.uri, metadata };
         } catch (err) {
-          console.error("Failed to fetch metadata for", item.uri, err);
           return {
             uri: item.uri,
             metadata: {
               name: `Card #${item.id.toString()}`,
-              description: "A legendary on-chain game card minted during local testing.",
+              description: "A legendary on-chain game card.",
               image: "ipfs://QmMockImageHash_default",
               attributes: [{ trait_type: "Rarity", value: "Legendary" }]
             }
@@ -105,17 +114,21 @@ export default function MarketplaceGallery() {
         return acc;
       }, {});
     },
-    enabled: activeListings.length > 0
+    enabled: activeListings.length > 0,
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
   });
 
   // Merge dynamic blockchain listing data with static IPFS metadata cache
-  const cards = activeListings.map(item => ({
-    ...item,
-    metadata: metadataCache?.[item.uri] || null
-  }));
+  const cards = useMemo(() => {
+    return activeListings.map(item => ({
+      ...item,
+      metadata: metadataCache?.[item.uri] || null
+    }));
+  }, [activeListings, metadataCache]);
 
   // 4. Buying logic
-  const { writeContractAsync, isPending: isWritePending } = useWriteContract();
+  const { writeContractAsync } = useWriteContract();
   const [txHash, setTxHash] = useState(null);
   
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
@@ -127,7 +140,7 @@ export default function MarketplaceGallery() {
     if (isConfirmed) {
       setBuyingId(null);
       setTxHash(null);
-      queryClient.invalidateQueries(); // Invalidate and reload all blockchain/metadata queries
+      queryClient.invalidateQueries();
     }
   }, [isConfirmed, queryClient]);
 
@@ -150,7 +163,7 @@ export default function MarketplaceGallery() {
     }
   };
 
-  const isLoading = isMulticallLoading || isMetadataLoading;
+  const isInitialLoading = (isMulticallLoading || isMetadataLoading) && tokenIds.length > 0 && cards.length === 0;
 
   if (!isContractConfigured()) {
     return (
@@ -172,7 +185,7 @@ export default function MarketplaceGallery() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isInitialLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="card-tile h-[360px] animate-pulse flex flex-col p-4">
@@ -183,41 +196,44 @@ export default function MarketplaceGallery() {
             </div>
           ))}
         </div>
-      ) : cards && cards.length > 0 ? (
+      ) : cards.length === 0 ? (
+        <div className="card-tile p-12 text-center max-w-xl mx-auto my-8">
+          <div className="text-4xl mb-3" aria-hidden="true">🃏</div>
+          <h3 className="font-display text-lg font-bold text-ivory uppercase tracking-wider mb-1">
+            No Cards Listed Right Now
+          </h3>
+          <p className="text-muted text-sm max-w-md mx-auto">
+            Be the first to mint a unique card and list it for sale!
+          </p>
+        </div>
+      ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {cards.map((card) => {
-            const isOwner = userAddress?.toLowerCase() === card.seller.toLowerCase();
-            const isBuyingThis = buyingId === card.id;
-            const isProcessing = isBuyingThis && (isWritePending || isConfirming);
-            
-            // Extract attributes from metadata
+            const priceStr = formatEther(card.price);
             const rarity = card.metadata?.attributes?.find(a => a.trait_type === "Rarity")?.value || "Common";
             const imageUrl = resolveIpfs(card.metadata?.image);
+            const isBuyingThis = buyingId === card.id;
 
             return (
               <Card
                 key={card.id.toString()}
                 id={card.id}
                 image={imageUrl}
-                name={card.metadata?.name}
+                name={card.metadata?.name || `Card #${card.id.toString()}`}
                 rarity={rarity}
                 description={card.metadata?.description}
-                price={formatEther(card.price)}
-                badgeText={`Seller: ${card.seller.slice(0, 6)}…${card.seller.slice(-4)}`}
-                onBuy={() => handleBuy(card.id, card.price)}
-                buyDisabled={isOwner || buyingId !== null || !userAddress}
-                buyText={isProcessing ? "Processing..." : isOwner ? "Owned" : !userAddress ? "Connect" : "Buy"}
+                price={priceStr}
+                badgeText="Available"
+                actionText={
+                  isBuyingThis 
+                    ? (isConfirming ? "Confirming..." : "Processing...") 
+                    : "Buy Now"
+                }
+                actionDisabled={buyingId !== null}
+                onAction={() => handleBuy(card.id, card.price)}
               />
             );
           })}
-        </div>
-      ) : (
-        <div className="card-tile p-12 flex flex-col items-center justify-center text-center">
-          <span className="text-5xl mb-4 opacity-50" aria-hidden>🏜️</span>
-          <h3 className="text-xl font-display font-bold text-ivory mb-2">The market is quiet</h3>
-          <p className="text-muted max-w-md">
-            There are currently no cards listed for sale. Be the first to mint and list a card!
-          </p>
         </div>
       )}
     </section>
