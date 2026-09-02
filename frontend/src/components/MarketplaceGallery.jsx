@@ -141,7 +141,6 @@ export default function MarketplaceGallery() {
         functionName: "buyCard",
         args: [BigInt(id)],
         value: price,
-        chainId: 31337,
         gas: 300000n,
       });
       setTxHash(hash);

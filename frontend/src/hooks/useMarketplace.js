@@ -42,8 +42,6 @@ export function parseMintedEvent(receipt) {
  */
 export function useMintCard() {
   const { writeContractAsync, isPending: isWalletPending } = useWriteContract();
-  const chainId = useChainId();
-  const { switchChainAsync } = useSwitchChain();
 
   const [stage,   setStage]   = useState("idle");
   const [txHash,  setTxHash]  = useState(null);
@@ -79,18 +77,6 @@ export function useMintCard() {
     setTokenId(null);
     setTxHash(null);
 
-    // Auto network switch to Hardhat Localhost if connected to Sepolia or another network
-    if (chainId !== 31337 && switchChainAsync) {
-      try {
-        await switchChainAsync({ chainId: 31337 });
-      } catch (switchErr) {
-        const msg = "Please switch your MetaMask network to Hardhat Localhost (Chain ID 31337).";
-        setError(msg);
-        setStage("error");
-        throw new Error(msg);
-      }
-    }
-
     try {
       setStage("confirm-tx");
       const hash = await writeContractAsync({
@@ -98,7 +84,6 @@ export function useMintCard() {
         abi:          ABI,
         functionName: "mintCardWithHash",
         args:         [metadataURI, contentHash],
-        chainId:      31337,
         gas:          500000n,
       });
       setTxHash(hash);
@@ -108,7 +93,7 @@ export function useMintCard() {
       const msg = err?.shortMessage ?? err?.message ?? "Transaction rejected or failed.";
       setError(msg);
       setStage("error");
-      throw err; // Re-throw error so callers abort and do NOT pretend mint succeeded!
+      throw err;
     }
   };
 

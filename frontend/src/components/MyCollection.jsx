@@ -143,7 +143,6 @@ export default function MyCollection() {
           abi: ABI,
           functionName: "setApprovalForAll",
           args: [CONTRACT_ADDRESS, true],
-          chainId: 31337,
         });
         await publicClient.waitForTransactionReceipt({ hash });
         await refetchApproval();
@@ -158,7 +157,6 @@ export default function MyCollection() {
         abi: ABI,
         functionName: "listCard",
         args: [BigInt(tokenId), priceWei],
-        chainId: 31337,
         gas: 300000n,
       });
       
@@ -186,7 +184,6 @@ export default function MyCollection() {
         abi: ABI,
         functionName: "burnCard",
         args: [BigInt(tokenId)],
-        chainId: 31337,
         gas: 300000n,
       });
       

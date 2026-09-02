@@ -93,7 +93,7 @@ function NetworkWarningBanner({ currentChainId, onSwitch, switching, error, targ
       >
         {switching
           ? <><span className="animate-spin inline-block mr-1">&#x27F3;</span>Switching&hellip;</>
-          : "Switch to {targetChainName}"}
+          : `Switch to ${targetChainName}`}
       </button>
     </div>
   );

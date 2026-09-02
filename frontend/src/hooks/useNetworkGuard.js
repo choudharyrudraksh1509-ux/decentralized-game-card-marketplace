@@ -1,9 +1,7 @@
 /**
  * useNetworkGuard.js
  *
- * Returns network state relative to a target chain, plus a one-call helper
- * that tries wagmi's useSwitchChain first, then falls back to the raw
- * wallet_switchEthereumChain / wallet_addEthereumChain RPC if needed.
+ * Returns network state relative to supported chains (Sepolia, Hardhat Localhost, Polygon, Mainnet).
  */
 import { useChainId, useSwitchChain } from "wagmi";
 import { useCallback, useState } from "react";
@@ -15,6 +13,13 @@ export const NETWORKS = {
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     rpcUrls: ["http://127.0.0.1:8545"],
     blockExplorerUrls: [],
+  },
+  11155111: {
+    chainId: "0xaa36a7", // 11155111 in hex
+    chainName: "Sepolia Testnet",
+    nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: ["https://rpc.sepolia.org"],
+    blockExplorerUrls: ["https://sepolia.etherscan.io"],
   },
   80002: {
     chainId: "0x13882", // 80002 in hex
@@ -32,10 +37,10 @@ export const NETWORKS = {
   }
 };
 
-export const TARGET_CHAIN_ID = parseInt(import.meta.env.VITE_CHAIN_ID || "31337", 10);
-export const TARGET_CHAIN_PARAMS = NETWORKS[TARGET_CHAIN_ID] || NETWORKS[31337];
+export const ALLOWED_CHAIN_IDS = [31337, 11155111, 80002, 80001, 1, 137];
+export const TARGET_CHAIN_ID = parseInt(import.meta.env.VITE_CHAIN_ID || "11155111", 10);
+export const TARGET_CHAIN_PARAMS = NETWORKS[TARGET_CHAIN_ID] || NETWORKS[11155111] || NETWORKS[31337];
 
-// Backwards compatibility alias for WalletConnector
 export const MUMBAI_CHAIN_ID = TARGET_CHAIN_ID;
 export const MUMBAI_CHAIN_PARAMS = TARGET_CHAIN_PARAMS;
 
@@ -45,10 +50,12 @@ export function useNetworkGuard(targetChainId = TARGET_CHAIN_ID) {
   const [switching, setSwitching] = useState(false);
   const [localError, setLocalError] = useState(null);
 
-  const isCorrectNetwork = currentChainId === targetChainId;
+  // Accept current chain if it is any of our supported chains (Sepolia, Hardhat, etc.)
+  const isCorrectNetwork = ALLOWED_CHAIN_IDS.includes(currentChainId);
+  const activeParams = NETWORKS[currentChainId] || NETWORKS[targetChainId] || NETWORKS[11155111];
 
   const switchToTarget = useCallback(async () => {
-    const params = NETWORKS[targetChainId];
+    const params = NETWORKS[targetChainId] || NETWORKS[11155111];
     if (!params) {
        setLocalError(`Configuration for chain ID ${targetChainId} not found.`);
        return;
@@ -90,7 +97,7 @@ export function useNetworkGuard(targetChainId = TARGET_CHAIN_ID) {
     isCorrectNetwork,
     switching,
     switchToTarget,
-    targetChainName: TARGET_CHAIN_PARAMS.chainName,
+    targetChainName: activeParams?.chainName || "Supported Network",
     error: localError ?? switchError?.message ?? null,
   };
 }
