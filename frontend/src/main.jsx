@@ -11,14 +11,26 @@ import { AuthProvider } from "./context/AuthContext";
 import App from "./App.jsx";
 import "./index.css";
 
-// ── Wagmi + RainbowKit config (hardhat first for local node deployment) ──
+// Order chains dynamically: sepolia first on web/production, hardhat first in local dev
+const targetChains = import.meta.env.PROD
+  ? [sepolia, hardhat, mainnet, polygonMumbai]
+  : [hardhat, sepolia, mainnet, polygonMumbai];
+
 const config = getDefaultConfig({
   appName: "Card Nexus",
   projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? "YOUR_PROJECT_ID",
-  chains: [hardhat, sepolia, mainnet, polygonMumbai],
+  chains: targetChains,
 });
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+      staleTime: 60_000,
+    }
+  }
+});
 
 // ── Custom RainbowKit theme ──
 const cardNexusTheme = darkTheme({

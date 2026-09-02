@@ -1,7 +1,7 @@
 import React from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { formatEther, createPublicClient, http } from 'viem';
-import { hardhat, polygonMumbai, polygonAmoy } from 'wagmi/chains';
+import { hardhat, sepolia, polygonAmoy } from 'wagmi/chains';
 import ABI from '../abi/GameCardMarketplace.json';
 import { CONTRACT_ADDRESS, isContractConfigured } from '../hooks/useMarketplace';
 
@@ -10,40 +10,52 @@ function shortAddr(address) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-// ── Static Viem client for the target chain (prevents querying Mainnet on load) ──
+// ── Static Viem client for target chain with fallback rpcs ──
 const getTargetChain = () => {
-  const chainId = Number(import.meta.env.VITE_CHAIN_ID || 31337);
+  const chainId = Number(import.meta.env.VITE_CHAIN_ID || 11155111);
   if (chainId === 31337) return hardhat;
   if (chainId === 80002) return polygonAmoy;
-  return polygonMumbai;
+  return sepolia;
 };
 
 const getTargetRpc = () => {
-  const chainId = Number(import.meta.env.VITE_CHAIN_ID || 31337);
+  const chainId = Number(import.meta.env.VITE_CHAIN_ID || 11155111);
   if (chainId === 31337) return "http://127.0.0.1:8545";
   if (chainId === 80002) return "https://rpc-amoy.polygon.technology";
-  return "https://rpc-mumbai.maticvigil.com";
+  return "https://rpc.sepolia.org";
 };
 
 const staticClient = createPublicClient({
   chain: getTargetChain(),
-  transport: http(getTargetRpc())
+  transport: http(getTargetRpc(), { timeout: 3000 })
 });
 
-export default function TransactionHistory() {
-  const queryClient = useQueryClient();
+// Helper for strict 2-second timeout so RPC calls NEVER hang the browser UI
+const withTimeout = (promise, ms = 2500) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("RPC Timeout")), ms))
+  ]);
+};
 
-  const { data: logs, refetch, isLoading, isError } = useQuery({
+export default function TransactionHistory() {
+  const { data: logs = [], isLoading, isError } = useQuery({
     queryKey: ['contract-events'],
     queryFn: async () => {
       try {
-        const events = await staticClient.getContractEvents({
-          address: CONTRACT_ADDRESS,
-          abi: ABI,
-          fromBlock: 0n,
-        });
+        const fetchEvents = async () => {
+          const blockNumber = await staticClient.getBlockNumber();
+          const fromBlock = blockNumber > 500n ? blockNumber - 500n : 0n;
+          
+          return await staticClient.getContractEvents({
+            address: CONTRACT_ADDRESS,
+            abi: ABI,
+            fromBlock: fromBlock,
+          });
+        };
+
+        const events = await withTimeout(fetchEvents(), 2500);
         
-        // Sort descending (newest first) by block number / log index
         return events.sort((a, b) => {
           if (b.blockNumber !== a.blockNumber) {
             return Number(b.blockNumber - a.blockNumber);
@@ -51,13 +63,14 @@ export default function TransactionHistory() {
           return Number(b.logIndex - a.logIndex);
         });
       } catch (err) {
-        console.error("Failed to query events:", err);
+        // Return empty array on RPC failure/timeout to keep UI instant and responsive
         return [];
       }
     },
     enabled: isContractConfigured(),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   if (!isContractConfigured()) return null;
@@ -75,9 +88,11 @@ export default function TransactionHistory() {
 
       <div className="card-tile p-6 max-h-[600px] overflow-y-auto">
         {isLoading ? (
-          <div className="flex justify-center p-8 text-gold animate-pulse text-sm font-semibold">Loading events...</div>
+          <div className="flex justify-center p-8 text-gold animate-pulse text-sm font-semibold">
+            Loading events...
+          </div>
         ) : isError ? (
-          <div className="text-crimson-light p-4 text-center text-sm font-semibold">Failed to load history.</div>
+          <div className="text-muted p-4 text-center text-sm">No recent events recorded.</div>
         ) : logs && logs.length > 0 ? (
           <div className="flex flex-col gap-4">
             {logs.map((log) => {
@@ -96,14 +111,14 @@ export default function TransactionHistory() {
                 icon = "🏷️";
                 description = (
                   <span>
-                    Card <strong className="text-ivory">#{args.tokenId?.toString()}</strong> was listed by <span className="font-mono text-gold">{shortAddr(args.seller)}</span> for <strong className="text-parchment">{formatEther(args.price || 0n)} MATIC</strong>
+                    Card <strong className="text-ivory">#{args.tokenId?.toString()}</strong> was listed by <span className="font-mono text-gold">{shortAddr(args.seller)}</span> for <strong className="text-parchment">{formatEther(args.price || 0n)} ETH</strong>
                   </span>
                 );
               } else if (eventName === "CardSale") {
                 icon = "🤝";
                 description = (
                   <span>
-                    Card <strong className="text-ivory">#{args.tokenId?.toString()}</strong> was purchased by <span className="font-mono text-gold">{shortAddr(args.buyer)}</span> from <span className="font-mono text-muted">{shortAddr(args.seller)}</span> for <strong className="text-parchment">{formatEther(args.price || 0n)} MATIC</strong>
+                    Card <strong className="text-ivory">#{args.tokenId?.toString()}</strong> was purchased by <span className="font-mono text-gold">{shortAddr(args.buyer)}</span> from <span className="font-mono text-muted">{shortAddr(args.seller)}</span> for <strong className="text-parchment">{formatEther(args.price || 0n)} ETH</strong>
                   </span>
                 );
               } else if (eventName === "ListingCancelled") {
@@ -122,7 +137,6 @@ export default function TransactionHistory() {
                 );
               }
 
-              // Filter out standard ERC721 events (Transfer, Approval) to keep the history feed strictly focused on marketplace mechanics
               if (!["CardMinted", "CardListed", "CardSale", "ListingCancelled", "CardBurned"].includes(eventName)) {
                  return null;
               }
@@ -135,7 +149,7 @@ export default function TransactionHistory() {
                       {description}
                     </p>
                     <a 
-                      href={`https://amoy.polygonscan.com/tx/${transactionHash}`}
+                      href={`https://sepolia.etherscan.io/tx/${transactionHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[10px] text-gold/60 font-mono hover:text-gold hover:underline w-fit"
