@@ -43,7 +43,11 @@ export default function LoginPage() {
         await register({ ...form, wallet_address: address });
       } else if (tab === 'forgot') {
         const data = await forgotPassword(form.email);
-        setMsg(data.message);
+        if (data.test_otp) {
+          setMsg(data.message + ` (TEST MODE: Your code is ${data.test_otp})`);
+        } else {
+          setMsg(data.message);
+        }
         if (data.preview_url) {
           setEmailPreviewUrl(data.preview_url);
         }

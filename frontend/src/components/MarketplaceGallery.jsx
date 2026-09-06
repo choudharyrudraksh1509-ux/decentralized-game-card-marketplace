@@ -230,13 +230,13 @@ export default function MarketplaceGallery() {
                 description={card.metadata?.description}
                 price={priceStr}
                 badgeText="Available"
-                actionText={
+                onBuy={() => handleBuy(card.id, card.price)}
+                buyDisabled={buyingId !== null}
+                buyText={
                   isBuyingThis 
                     ? (isConfirming ? "Confirming..." : "Processing...") 
                     : "Buy Now"
                 }
-                actionDisabled={buyingId !== null}
-                onAction={() => handleBuy(card.id, card.price)}
               />
             );
           })}
