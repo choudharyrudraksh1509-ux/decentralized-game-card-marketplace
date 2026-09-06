@@ -1,6 +1,29 @@
 # 🎴 Card Nexus — Decentralized Game Card Marketplace
 
-A fully decentralized application (dApp) and Web3 gaming portal for minting, trading, patenting, buying, selling, and burning digital game cards as ERC-721 NFTs on Polygon / Localhost.
+A fully decentralized application (dApp) and Web3 gaming portal for minting, trading, patenting, buying, selling, and burning digital game cards as ERC-721 NFTs on Sepolia Testnet.
+
+### 🌐 Live Demo: [https://card-nexus-frontend.onrender.com](https://card-nexus-frontend.onrender.com)
+
+---
+
+## 📸 Screenshots
+
+| Login & Authentication | Marketplace Dashboard |
+|:---:|:---:|
+| ![Login](screenshots/login.png) | ![Dashboard](screenshots/dashboard.png) |
+
+| Live Market | Minting Portal |
+|:---:|:---:|
+| ![Market](screenshots/market.png) | ![Mint](screenshots/mint.png) |
+
+| My Collection | Transaction History |
+|:---:|:---:|
+| ![My Collection](screenshots/mycollection.png) | ![History](screenshots/history.png) |
+
+<p align="center">
+  <b>Profile Settings</b><br>
+  <img src="screenshots/settings.png" alt="Settings" width="50%" />
+</p>
 
 ---
 
