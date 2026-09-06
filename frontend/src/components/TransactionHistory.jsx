@@ -22,7 +22,7 @@ const getTargetRpc = () => {
   const chainId = Number(import.meta.env.VITE_CHAIN_ID || 11155111);
   if (chainId === 31337) return "http://127.0.0.1:8545";
   if (chainId === 80002) return "https://rpc-amoy.polygon.technology";
-  return "https://rpc.sepolia.org";
+  return "https://ethereum-sepolia-rpc.publicnode.com";
 };
 
 const staticClient = createPublicClient({
