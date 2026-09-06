@@ -214,7 +214,7 @@ export default function MarketplaceGallery() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {cards.map((card) => {
+          {cards.map((card, index) => {
             const priceStr = formatEther(card.price);
             const rarity = card.metadata?.attributes?.find(a => a.trait_type === "Rarity")?.value || "Common";
             const imageUrl = resolveIpfs(card.metadata?.image);
@@ -224,6 +224,7 @@ export default function MarketplaceGallery() {
               <Card
                 key={card.id.toString()}
                 id={card.id}
+                displayNumber={index + 1}
                 image={imageUrl}
                 name={card.metadata?.name || `Card #${card.id.toString()}`}
                 rarity={rarity}

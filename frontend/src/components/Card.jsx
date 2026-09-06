@@ -9,7 +9,8 @@ const RARITY_STYLES = {
 };
 
 export default function Card({ 
-  id, 
+  id,
+  displayNumber, 
   image, 
   name, 
   rarity, 
@@ -56,10 +57,10 @@ export default function Card({
           <div className="w-full h-full flex items-center justify-center text-3xl opacity-20">?</div>
         )}
         
-        {/* Token ID */}
-        {id && (
+        {/* Token ID or Display Number */}
+        {(displayNumber || id) && (
           <div className="absolute top-2 right-2 bg-obsidian/80 backdrop-blur rounded px-2 py-1 text-[10px] font-mono text-gold border border-gold/20 shadow-lg">
-            #{id.toString()}
+            #{displayNumber || id.toString()}
           </div>
         )}
       </div>
