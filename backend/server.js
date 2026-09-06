@@ -198,7 +198,9 @@ app.post('/upload-avatar', upload.single('image'), async (req, res) => {
     fs.copyFileSync(req.file.path, targetPath);
     if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
 
-    res.json({ url: `http://localhost:5000/images/${filename}` });
+    const host = req.get('host');
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    res.json({ url: `${protocol}://${host}/images/${filename}` });
   } catch (error) {
     console.error('Error in /upload-avatar:', error.message);
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
