@@ -386,12 +386,11 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
     await user.update({ reset_otp: otp, reset_otp_expires: expires });
 
-    // Send email using Nodemailer (with Ethereal Email test fallback if no SMTP configured)
+    // Send email using Nodemailer (skip on Render Free Tier if no SMTP configured)
     let previewUrl = null;
     try {
-      let transporter;
       if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-        transporter = nodemailer.createTransport({
+        const transporter = nodemailer.createTransport({
           host: process.env.SMTP_HOST,
           port: Number(process.env.SMTP_PORT || 587),
           secure: process.env.SMTP_SECURE === 'true',
@@ -400,51 +399,34 @@ app.post('/api/auth/forgot-password', async (req, res) => {
             pass: process.env.SMTP_PASS,
           },
         });
+        
+        const mailOptions = {
+          from: '"Card Nexus Support" <support@cardnexus.io>',
+          to: user.email,
+          subject: '🃏 Card Nexus - Password Reset Verification Code',
+          html: `
+            <div style="font-family: Arial, sans-serif; background-color: #0F172A; color: #F1F5F9; padding: 30px; border-radius: 12px;">
+              <h2 style="color: #F59E0B;">Card Nexus Password Reset</h2>
+              <p>Your 6-digit password verification code is:</p>
+              <h1 style="color: #F59E0B; letter-spacing: 5px; background-color: #1E293B; padding: 15px; text-align: center; border-radius: 8px;">${otp}</h1>
+              <p style="color: #94A3B8; font-size: 12px;">This code will expire in 15 minutes.</p>
+            </div>
+          `
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log(`[NODEMAILER] Password Reset Email Sent to: ${user.email}`);
       } else {
-        const testAccount = await nodemailer.createTestAccount();
-        transporter = nodemailer.createTransport({
-          host: 'smtp.ethereal.email',
-          port: 587,
-          secure: false,
-          auth: {
-            user: testAccount.user,
-            pass: testAccount.pass,
-          },
-        });
+        console.log(`[TEST MODE] Generated OTP for ${user.email}: ${otp}`);
       }
-
-      const mailOptions = {
-        from: '"Card Nexus Support" <support@cardnexus.io>',
-        to: user.email,
-        subject: '🃏 Card Nexus - Password Reset Verification Code',
-        html: `
-          <div style="font-family: Arial, sans-serif; background-color: #0F172A; color: #F1F5F9; padding: 30px; border-radius: 12px;">
-            <h2 style="color: #F59E0B;">Card Nexus Password Reset</h2>
-            <p>Your 6-digit password verification code is:</p>
-            <h1 style="color: #F59E0B; letter-spacing: 5px; background-color: #1E293B; padding: 15px; text-align: center; border-radius: 8px;">${otp}</h1>
-            <p style="color: #94A3B8; font-size: 12px;">This code will expire in 15 minutes. If you did not request a password reset, please ignore this email.</p>
-          </div>
-        `
-      };
-
-      const info = await transporter.sendMail(mailOptions);
-      previewUrl = nodemailer.getTestMessageUrl(info);
-
-      console.log(`\n==============================================`);
-      console.log(`[NODEMAILER] Password Reset Email Sent to: ${user.email}`);
-      console.log(`Code: ${otp}`);
-      if (previewUrl) {
-        console.log(`📧 Ethereal Test Inbox URL: ${previewUrl}`);
-      }
-      console.log(`==============================================\n`);
-
     } catch (mailErr) {
       console.error('Nodemailer send error:', mailErr);
     }
 
     res.json({ 
       message: 'A 6-digit verification code has been generated and sent!',
-      preview_url: previewUrl
+      preview_url: previewUrl,
+      test_otp: process.env.SMTP_HOST ? undefined : otp
     });
   } catch (error) {
     console.error('Forgot password error:', error);
