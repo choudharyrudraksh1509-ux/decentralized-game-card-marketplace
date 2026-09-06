@@ -115,7 +115,8 @@ const getClient = () => isMockMode ? null : new NFTStorage({ token: apiKey });
 async function isTokenActiveOnChain(tokenId) {
   if (!tokenId) return false;
   try {
-    const res = await fetch('http://127.0.0.1:8545', {
+    const rpcUrl = process.env.RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+    const res = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -124,7 +125,7 @@ async function isTokenActiveOnChain(tokenId) {
         method: 'eth_call',
         params: [
           {
-            to: process.env.VITE_CONTRACT_ADDRESS || '0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0',
+            to: process.env.VITE_CONTRACT_ADDRESS,
             // ownerOf(uint256) selector: 0x6352211e
             data: '0x6352211e' + BigInt(tokenId).toString(16).padStart(64, '0')
           },
