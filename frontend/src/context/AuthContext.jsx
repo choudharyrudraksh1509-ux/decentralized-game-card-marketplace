@@ -74,7 +74,7 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ email })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to request reset');
+    if (!res.ok) throw new Error(data.error || data.message || 'Failed to request reset');
     return data;
   };
 
