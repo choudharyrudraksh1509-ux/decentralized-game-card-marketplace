@@ -44,7 +44,8 @@ export default function LoginPage() {
       } else if (tab === 'forgot') {
         const data = await forgotPassword(form.email);
         if (data.test_otp) {
-          setMsg(data.message + ` (TEST MODE: Your code is ${data.test_otp})`);
+          setMsg(data.message + ` (TEST MODE: OTP Auto-Filled)`);
+          setForm(prev => ({ ...prev, otp: data.test_otp }));
         } else {
           setMsg(data.message);
         }

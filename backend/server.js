@@ -379,7 +379,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     if (!email) return res.status(400).json({ error: 'Missing email' });
 
     const user = await User.findOne({ where: { email } });
-    if (!user) return res.json({ message: 'If an account exists, a reset code was sent.' });
+    if (!user) return res.status(404).json({ message: 'Email not found in our database. Please register first.' });
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expires = new Date(Date.now() + 15 * 60 * 1000);
